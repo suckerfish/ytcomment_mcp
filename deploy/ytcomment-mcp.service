@@ -9,7 +9,7 @@ Group=ytcomment-mcp
 WorkingDirectory=/opt/ytcomment-mcp
 Environment=PATH=/opt/ytcomment-mcp/venv/bin
 Environment=PYTHONPATH=/opt/ytcomment-mcp/src
-ExecStart=/opt/ytcomment-mcp/venv/bin/python src/server.py --transport streamable-http --host 0.0.0.0 --port 8080
+ExecStart=/opt/ytcomment-mcp/venv/bin/python src/http_server.py --host 0.0.0.0 --port 8080
 Restart=always
 RestartSec=3
 StandardOutput=journal
