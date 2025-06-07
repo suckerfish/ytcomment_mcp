@@ -191,6 +191,7 @@ For detailed implementation guidance, see:
 - **[Quick Start Guide](docs/quickstart.md)** - Setup, basic server creation, first tools
 - **[Authentication Guide](docs/authentication.md)** - OAuth 2.1, security patterns, context injection
 - **[Deployment Guide](docs/deployment.md)** - Production deployment, Docker, cloud platforms
+- **[Transport Troubleshooting](docs/transport-troubleshooting.md)** - Transport configuration, stateless HTTP, common errors
 - **[Testing Guide](docs/testing.md)** - MCPTools usage, unit testing, integration testing
 - **[Best Practices](docs/best-practices.md)** - Error handling, performance, security, code quality
 - **[MCPTools Documentation](docs/mcptools.md)** - Detailed testing and validation guide
@@ -321,6 +322,8 @@ async def my_tool():
 - **Authentication issues**: Check Context usage and scope validation
 - **Connection issues**: Verify server is running and accessible
 - **Testing failures**: Use `mcp tools --server-logs` to see detailed errors
+- **"Task group is not initialized"**: Use `stateless_http=True` for remote deployments
+- **SSE 404 errors**: Switch to streamable HTTP transport with stateless mode
 - **Variables showing as None**: Import configuration modules inside tool functions, not at module level
 - **Build wheel errors**: Add `[tool.hatch.build.targets.wheel]` and `packages = ["src"]` to pyproject.toml
 - **Command-line args not working**: Ensure `initialize_config()` is called in `main()` before `mcp.run()`

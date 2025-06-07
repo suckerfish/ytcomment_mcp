@@ -4,15 +4,16 @@ This guide covers deploying FastMCP servers to production environments, from sim
 
 ## Deployment Options Overview
 
-| Platform | Best For | Transport Support | Auto-scaling | Cost |
-|----------|----------|-------------------|--------------|------|
-| Google Cloud Run | Serverless, auto-scaling | Streamable HTTP only* | Yes | Pay-per-use |
-| Vercel | Node.js/Python, edge network | Streamable HTTP only* | Yes | Generous free tier |
-| Railway | Simple deployment | Both transports | Yes | Simple pricing |
-| Digital Ocean | Traditional hosting | Both transports | Manual | Predictable costs |
-| AWS ECS/Fargate | Enterprise, containers | Both transports | Yes | Complex pricing |
+| Platform | Best For | Recommended Transport | Auto-scaling | Cost |
+|----------|----------|----------------------|--------------|------|
+| Google Cloud Run | Serverless, auto-scaling | Streamable HTTP (stateless)* | Yes | Pay-per-use |
+| Vercel | Node.js/Python, edge network | Streamable HTTP (stateless)* | Yes | Generous free tier |
+| Railway | Simple deployment | Streamable HTTP (stateless) | Yes | Simple pricing |
+| Digital Ocean | Traditional hosting | Streamable HTTP (stateless) | Manual | Predictable costs |
+| AWS ECS/Fargate | Enterprise, containers | Streamable HTTP (stateless) | Yes | Complex pricing |
+| VPS/Dedicated | Full control, Tailscale | Streamable HTTP (stateless) | Manual | Predictable costs |
 
-*Legacy HTTP+SSE transport prevents scaling to zero due to persistent connections.
+*Always use `stateless_http=True` for reliable remote deployments. SSE transport should be avoided for production use.
 
 ## Local Development Setup
 
@@ -23,7 +24,8 @@ This guide covers deploying FastMCP servers to production environments, from sim
 import os
 from fastmcp import FastMCP
 
-mcp = FastMCP("Development Server")
+# Initialize with stateless HTTP for reliable remote deployment
+mcp = FastMCP("Development Server", stateless_http=True)
 
 @mcp.tool()
 def example_tool() -> str:
@@ -36,6 +38,7 @@ if __name__ == "__main__":
     port = int(os.getenv("PORT", "8000"))
     
     if transport == "http":
+        # Use streamable HTTP with stateless mode for remote access
         mcp.run(transport="streamable-http", host="0.0.0.0", port=port)
     else:
         mcp.run()  # Default STDIO for local testing
@@ -118,7 +121,8 @@ logging.basicConfig(
 
 mcp = FastMCP(
     name="Production MCP Server",
-    version="1.0.0"
+    version="1.0.0",
+    stateless_http=True  # Required for reliable production deployment
 )
 
 # Add health check endpoint
@@ -727,7 +731,41 @@ async def health_check(request):
 
 ## Troubleshooting Deployment Issues
 
-### Common Problems
+### Transport-Related Issues
+
+**"Task group is not initialized" Error:**
+This is the most common issue with streamable HTTP transport. Always use `stateless_http=True` for remote deployments:
+
+```python
+# WRONG - will cause errors in remote deployments
+mcp = FastMCP("Server Name")
+
+# CORRECT - reliable for all deployment scenarios  
+mcp = FastMCP("Server Name", stateless_http=True)
+```
+
+**SSE 404 Errors:**
+If you see 404 errors on `/mcp` endpoint, your service may be using the wrong transport:
+
+```bash
+# Check what transport your service is actually using
+sudo systemctl status your-service
+
+# Should show --transport streamable-http, not --transport sse
+```
+
+**Service Not Updating After Changes:**
+SystemD services need to be restarted to pick up configuration changes:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart your-service
+sudo systemctl status your-service  # Verify new configuration
+```
+
+For comprehensive transport troubleshooting, see **[Transport Troubleshooting Guide](transport-troubleshooting.md)**.
+
+### Common Infrastructure Problems
 
 1. **Port Binding Issues**: Ensure your app binds to `0.0.0.0`, not `127.0.0.1`
 2. **Environment Variables**: Use proper environment variable loading
@@ -743,9 +781,14 @@ docker logs container-name
 kubectl logs pod-name
 gcloud run logs read --service=mcp-server
 
-# Test endpoints
+# Test health endpoint
 curl -f http://localhost:8000/health
-curl -H "Authorization: Bearer token" http://localhost:8000/mcp
+
+# Test MCP endpoint (streamable HTTP)
+curl -H "Accept: application/json, text/event-stream" \
+     -H "Content-Type: application/json" \
+     -d '{"jsonrpc":"2.0","method":"tools/list","id":"test","params":{}}' \
+     http://localhost:8000/mcp
 
 # Monitor resources
 docker stats
@@ -754,6 +797,7 @@ kubectl top pods
 
 ## Next Steps
 
+- **Transport Issues**: See [transport-troubleshooting.md](transport-troubleshooting.md) for transport configuration and troubleshooting
 - **Testing**: See [testing.md](testing.md) for production testing strategies
 - **Best Practices**: Review [best-practices.md](best-practices.md) for production optimization
 - **Authentication**: Check [authentication.md](authentication.md) for secure production auth
