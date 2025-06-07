@@ -7,7 +7,7 @@ name = "ytcomment-mcp"
 version = "0.1.0"
 description = "YouTube Comment Downloader MCP Server"
 authors = [{name = "Chad Kunsman"}]
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 dependencies = [
     "fastmcp>=0.2.0",
     "youtube-comment-downloader",
