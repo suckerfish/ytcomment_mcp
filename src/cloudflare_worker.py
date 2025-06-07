@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
-"""YouTube Comment Downloader MCP Server."""
+"""Cloudflare Worker entry point for YouTube Comment Downloader MCP Server."""
 
-import argparse
+import os
+import sys
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
-import sys
-import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.tools.youtube_comments import YouTubeCommentDownloader
-from src.models.youtube import CommentRequest
+# Add src to path for imports
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# Initialize MCP server
+from tools.youtube_comments import YouTubeCommentDownloader
+from models.youtube import CommentRequest
+
+# Initialize MCP server with streamable HTTP transport
 mcp = FastMCP("YouTube Comment Downloader")
 
 # Initialize comment downloader
@@ -266,35 +267,15 @@ async def get_top_comments_by_likes(
             raise
         raise ToolError(f"Failed to get top comments by likes: {str(e)}")
 
-def parse_arguments():
-    """Parse command-line arguments."""
-    parser = argparse.ArgumentParser(description='YouTube Comment Downloader MCP Server')
-    parser.add_argument('--port', type=int, default=8000, help='Server port (default: 8000)')
-    parser.add_argument('--debug', action='store_true', help='Enable debug mode')
-    parser.add_argument('--transport', choices=['stdio', 'streamable-http'], default='stdio', 
-                       help='Transport protocol: stdio for local use, streamable-http for remote deployment')
-    parser.add_argument('--host', default='127.0.0.1', help='Host to bind to for HTTP transport (default: 127.0.0.1)')
-    return parser.parse_args()
-
 def main():
-    """Main entry point for the MCP server."""
-    args = parse_arguments()
-    
-    if args.debug:
-        import logging
-        logging.basicConfig(level=logging.DEBUG)
-    
-    if args.transport == 'streamable-http':
-        # Run with streamable HTTP transport for remote deployment
-        mcp.run(
-            transport="streamable-http",
-            host=args.host,
-            port=args.port,
-            log_level="debug" if args.debug else "info"
-        )
-    else:
-        # Traditional STDIO transport for local MCP clients
-        mcp.run()
+    """Entry point for Cloudflare Worker with streamable HTTP transport."""
+    # Run with streamable HTTP for Cloudflare Workers
+    mcp.run(
+        transport="streamable-http",
+        host="0.0.0.0",
+        port=8080,
+        log_level="info"
+    )
 
 if __name__ == "__main__":
     main()

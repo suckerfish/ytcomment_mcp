@@ -1,0 +1,26 @@
+[Unit]
+Description=YouTube Comment MCP Server
+After=network.target
+
+[Service]
+Type=simple
+User=ytcomment-mcp
+Group=ytcomment-mcp
+WorkingDirectory=/opt/ytcomment-mcp
+Environment=PATH=/opt/ytcomment-mcp/venv/bin
+Environment=PYTHONPATH=/opt/ytcomment-mcp/src
+ExecStart=/opt/ytcomment-mcp/venv/bin/python src/server.py --transport streamable-http --host 0.0.0.0 --port 8080
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+
+# Security settings
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/ytcomment-mcp/logs
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
