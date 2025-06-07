@@ -35,6 +35,8 @@ if [ -d "$APP_DIR/.git" ]; then
 elif [ -d "$APP_DIR" ] && [ "$(ls -A $APP_DIR)" ]; then
     echo "⚠️ Directory exists but is not a git repository. Removing and cloning fresh..."
     rm -rf $APP_DIR
+    mkdir -p $APP_DIR
+    chown $APP_USER:$APP_USER $APP_DIR
     sudo -u $APP_USER git clone $REPO_URL $APP_DIR
     cd $APP_DIR
 else
