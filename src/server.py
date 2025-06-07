@@ -271,8 +271,8 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description='YouTube Comment Downloader MCP Server')
     parser.add_argument('--port', type=int, default=8000, help='Server port (default: 8000)')
     parser.add_argument('--debug', action='store_true', help='Enable debug mode')
-    parser.add_argument('--transport', choices=['stdio', 'streamable-http'], default='stdio', 
-                       help='Transport protocol: stdio for local use, streamable-http for remote deployment')
+    parser.add_argument('--transport', choices=['stdio', 'sse'], default='stdio', 
+                       help='Transport protocol: stdio for local use, sse for remote deployment')
     parser.add_argument('--host', default='127.0.0.1', help='Host to bind to for HTTP transport (default: 127.0.0.1)')
     return parser.parse_args()
 
@@ -284,10 +284,10 @@ def main():
         import logging
         logging.basicConfig(level=logging.DEBUG)
     
-    if args.transport == 'streamable-http':
-        # Run with streamable HTTP transport for remote deployment
+    if args.transport == 'sse':
+        # Run with SSE transport for remote deployment
         mcp.run(
-            transport="streamable-http",
+            transport="sse",
             host=args.host,
             port=args.port,
             log_level="debug" if args.debug else "info"
