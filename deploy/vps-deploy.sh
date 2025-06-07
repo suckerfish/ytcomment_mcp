@@ -27,16 +27,20 @@ else
     echo "ℹ️ User $APP_USER already exists"
 fi
 
-echo "📁 Setting up application directory..."
-mkdir -p $APP_DIR
-chown $APP_USER:$APP_USER $APP_DIR
-
-echo "📥 Cloning repository..."
+echo "📥 Setting up repository..."
 if [ -d "$APP_DIR/.git" ]; then
     echo "ℹ️ Repository already exists, pulling latest changes..."
     cd $APP_DIR
     sudo -u $APP_USER git pull
+elif [ -d "$APP_DIR" ] && [ "$(ls -A $APP_DIR)" ]; then
+    echo "⚠️ Directory exists but is not a git repository. Removing and cloning fresh..."
+    rm -rf $APP_DIR
+    sudo -u $APP_USER git clone $REPO_URL $APP_DIR
+    cd $APP_DIR
 else
+    echo "📁 Creating application directory and cloning..."
+    mkdir -p $APP_DIR
+    chown $APP_USER:$APP_USER $APP_DIR
     sudo -u $APP_USER git clone $REPO_URL $APP_DIR
     cd $APP_DIR
 fi
