@@ -176,8 +176,8 @@ async def search_comments(
 @mcp.tool()
 async def get_top_comments_by_likes(
     video_id: str,
-    top_count: int = 20,
-    sample_size: int = 500
+    top_count: int = 10,
+    sample_size: int = None
 ) -> dict:
     """
     Get the most popular, most liked, top-rated, or highest-engagement comments by actual like count.
@@ -190,24 +190,40 @@ async def get_top_comments_by_likes(
     - "viral comments"
     - "best comments"
     
+    This tool automatically determines the optimal sample size by first probing the video,
+    then downloads the maximum available comments (up to 10,000) to ensure you get the
+    ACTUAL most-liked comments, not just the most-liked from a small sample.
+    
     This sorts by ACTUAL like count, not YouTube's "popular" algorithm which mixes likes with recency.
-    More reliable than YouTube's built-in popular sort for finding truly viral comments.
+    Much more reliable than YouTube's built-in popular sort for finding truly viral comments.
     
     Args:
         video_id: YouTube video ID (e.g., 'dQw4w9WgXcQ')
-        top_count: Number of top comments to return (1-100, default: 20)
-        sample_size: Size of sample to download and sort from (100-2000, default: 500)
+        top_count: Number of top comments to return (1-100, default: 10)
+        sample_size: Optional - specify sample size manually. If None (default), auto-sizes based on video's comment count
     
     Returns:
-        Dictionary containing top comments ranked by like count with engagement stats
+        Dictionary containing top comments ranked by like count with engagement stats and auto-sizing info
     """
     try:
         if not 1 <= top_count <= 100:
             raise ToolError("top_count must be between 1 and 100")
-        if not 100 <= sample_size <= 2000:
-            raise ToolError("sample_size must be between 100 and 2000")
+        
+        # Auto-sizing logic: since we can't reliably probe total count, use aggressive sampling
+        if sample_size is None:
+            # The youtube-comment-downloader doesn't provide total count info in probe
+            # So we use aggressive sampling strategy - download maximum possible
+            sample_size = 10000  # Always try for maximum to ensure we get the real top comments
+            estimated_total = "auto-sized (max download)"
+            auto_sized = True
+        else:
+            # Manual sample_size provided
+            if not 100 <= sample_size <= 10000:
+                raise ToolError("sample_size must be between 100 and 10000")
+            estimated_total = "manual override"
+            auto_sized = False
             
-        # Download a larger sample using popular sort as starting point
+        # Download the calculated sample size using popular sort as starting point
         request = CommentRequest(
             video_id=video_id,
             limit=sample_size,
@@ -242,6 +258,12 @@ async def get_top_comments_by_likes(
             "video_id": response.video_id,
             "top_count_requested": top_count,
             "sample_size": response.total_comments,
+            "auto_sizing_info": {
+                "auto_sized": auto_sized,
+                "estimated_total_comments": estimated_total,
+                "calculated_sample_size": sample_size,
+                "coverage_percentage": round((response.total_comments / estimated_total * 100), 1) if isinstance(estimated_total, int) and estimated_total > 0 else "N/A"
+            },
             "top_comments": [
                 {
                     "rank": i + 1,

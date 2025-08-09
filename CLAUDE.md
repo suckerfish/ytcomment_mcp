@@ -16,22 +16,28 @@ Test the MCP server locally:
 
 ```bash
 # Test server functionality directly
-python test_server.py
+uv run python test_server.py
 
 # Test token estimation for comments
-python test_tokens.py
+uv run python test_tokens.py
 
 # Test reply structure analysis
-python test_replies.py
+uv run python test_replies.py
 
 # Test top comments by likes
-python test_top_likes.py
+uv run python test_top_likes.py
 
-# Run the MCP server for client connections
-python src/server.py
+# Run the MCP server for client connections (stdio transport)
+uv run python src/server.py
 
 # Run with debug logging
-python src/server.py --debug
+uv run python src/server.py --debug
+
+# Run with streamable HTTP transport (for remote access)
+uv run python src/server.py --transport streamable-http --host 0.0.0.0 --port 8080
+
+# Test with MCPTools
+mcp tools uv run python src/server.py
 ```
 
 ### Package Management
@@ -198,6 +204,12 @@ For detailed implementation guidance, see:
 
 ## Key Implementation Notes
 
+### Transport Configuration
+- **Local Development**: Uses `stdio` transport by default
+- **Remote/VPS Deployment**: Uses `streamable-http` with `stateless_http=True`
+- **Production Servers**: Always configure with `stateless_http=True` for reliability
+- **Current Status**: ✅ VPS deployment working with streamable HTTP transport
+
 ### Reply Structure
 - Comments downloaded in **flat structure** (not hierarchical)
 - Mix of top-level comments (~10%) and replies (~90%) 
@@ -315,15 +327,48 @@ async def my_tool():
 }
 ```
 
+## VPS Deployment Status
+
+### ✅ Current Deployment Configuration
+The server is successfully deployed on VPS with:
+- **Transport**: Streamable HTTP with `stateless_http=True`
+- **Network**: Accessible via Tailscale
+- **Service**: SystemD service configured and running
+- **Status**: All transport issues resolved
+
+### Quick VPS Commands
+```bash
+# Check service status
+sudo systemctl status ytcomment-mcp
+
+# View logs
+sudo journalctl -u ytcomment-mcp -f
+
+# Restart service
+sudo systemctl restart ytcomment-mcp
+
+# Test endpoint
+curl -H "Accept: application/json, text/event-stream" \
+     -H "Content-Type: application/json" \
+     -d '{"jsonrpc":"2.0","method":"tools/list","id":"test","params":{}}' \
+     http://localhost:8080/mcp
+```
+
 ## Troubleshooting
 
+### Transport Issues (Recently Solved)
+- **"Task group is not initialized"**: ✅ Fixed with `stateless_http=True`
+- **SSE 404 errors**: ✅ Fixed by switching to streamable HTTP transport
+- **VPS deployment issues**: ✅ Resolved with proper SystemD configuration
+
+### Common Issues
 - **Tool not found**: Check tool is registered with `@mcp.tool()` decorator
 - **Validation errors**: Verify Pydantic model matches expected input
 - **Authentication issues**: Check Context usage and scope validation
 - **Connection issues**: Verify server is running and accessible
 - **Testing failures**: Use `mcp tools --server-logs` to see detailed errors
-- **"Task group is not initialized"**: Use `stateless_http=True` for remote deployments
-- **SSE 404 errors**: Switch to streamable HTTP transport with stateless mode
 - **Variables showing as None**: Import configuration modules inside tool functions, not at module level
 - **Build wheel errors**: Add `[tool.hatch.build.targets.wheel]` and `packages = ["src"]` to pyproject.toml
 - **Command-line args not working**: Ensure `initialize_config()` is called in `main()` before `mcp.run()`
+
+For detailed transport troubleshooting, see **[Transport Troubleshooting Guide](docs/transport-troubleshooting.md)**.
