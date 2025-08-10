@@ -173,7 +173,7 @@ class YouTubeAPIClient:
                 top_comment['publishedAt'][:19], '%Y-%m-%dT%H:%M:%S'
             )),
             'author': top_comment['authorDisplayName'],
-            'channel': top_comment['authorChannelId']['value'] if 'authorChannelId' in top_comment else '',
+            'channel': top_comment.get('authorChannelId', {}).get('value', '') if top_comment.get('authorChannelId') else '',
             'votes': str(top_comment.get('likeCount', 0)),
             'replies': str(thread['snippet'].get('totalReplyCount', 0)),
             'photo': top_comment.get('authorProfileImageUrl', ''),
@@ -199,7 +199,7 @@ class YouTubeAPIClient:
                         reply_snippet['publishedAt'][:19], '%Y-%m-%dT%H:%M:%S'
                     )),
                     'author': reply_snippet['authorDisplayName'],
-                    'channel': reply_snippet['authorChannelId']['value'] if 'authorChannelId' in reply_snippet else '',
+                    'channel': reply_snippet.get('authorChannelId', {}).get('value', '') if reply_snippet.get('authorChannelId') else '',
                     'votes': str(reply_snippet.get('likeCount', 0)),
                     'replies': '0',  # Replies to replies aren't included
                     'photo': reply_snippet.get('authorProfileImageUrl', ''),
