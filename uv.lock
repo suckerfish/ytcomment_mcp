@@ -1584,6 +1584,7 @@ dependencies = [
     { name = "google-api-python-client" },
     { name = "google-auth" },
     { name = "pydantic" },
+    { name = "python-dotenv" },
     { name = "youtube-comment-downloader" },
 ]
 
@@ -1602,5 +1603,6 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.0.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.21.0" },
+    { name = "python-dotenv", specifier = ">=1.1.0" },
     { name = "youtube-comment-downloader" },
 ]

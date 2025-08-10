@@ -71,10 +71,18 @@ uv add <package_name>
 
 ### ✅ Recommended API Usage Examples
 
-**🔑 API Key Setup:**
-```bash
-export YOUTUBE_API_KEY="your-api-key-here"
-# OR pass as parameter to any API tool
+**🔑 MCP Client Configuration:**
+```json
+{
+  "ytcomment": {
+    "command": "uv",
+    "args": ["run", "python", "src/server.py"],
+    "cwd": "/path/to/ytcomment_mcp",
+    "env": {
+      "YOUTUBE_API_KEY": "your-api-key-here"
+    }
+  }
+}
 ```
 
 **📊 Download Comments (100% Accurate):**
@@ -83,8 +91,7 @@ export YOUTUBE_API_KEY="your-api-key-here"
 result = await download_youtube_comments_api(
     video_id="dQw4w9WgXcQ",
     limit=100,
-    sort=1,  # 1=recent, 0=popular
-    api_key="your-key"  # Optional if env var set
+    sort=1  # 1=recent, 0=popular
 )
 
 # Get accurate engagement statistics
@@ -290,7 +297,19 @@ LOG_LEVEL=info                   # Logging level
 2. Create/select a project
 3. Enable YouTube Data API v3
 4. Create credentials (API Key)
-5. Set `YOUTUBE_API_KEY` environment variable
+5. Add to MCP client configuration (see example above)
+
+**🧪 Local Testing:**
+```bash
+# Copy example env file
+cp .env.example .env
+
+# Edit .env with your API key
+YOUTUBE_API_KEY=your-api-key-here
+
+# Test locally
+uv run python test_api.py
+```
 
 ## Configuration Patterns
 

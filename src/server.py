@@ -6,6 +6,11 @@ from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 import sys
 import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.tools.youtube_comments import YouTubeCommentDownloader
@@ -290,19 +295,18 @@ async def get_top_comments_by_likes(
             raise
         raise ToolError(f"Failed to get top comments by likes: {str(e)}")
 
-def get_api_client(api_key: str = None) -> YouTubeAPIClient:
+def get_api_client() -> YouTubeAPIClient:
     """Get or create API client with proper error handling."""
     global api_client
-    if api_client is None or api_key:
-        api_client = YouTubeAPIClient(api_key)
+    if api_client is None:
+        api_client = YouTubeAPIClient()  # Uses YOUTUBE_API_KEY env var
     return api_client
 
 @mcp.tool()
 async def download_youtube_comments_api(
     video_id: str,
     limit: int = 1000,
-    sort: int = 1,
-    api_key: str = None
+    sort: int = 1
 ) -> dict:
     """
     Download YouTube comments using the official YouTube Data API for 100% reliable results.
@@ -317,13 +321,12 @@ async def download_youtube_comments_api(
         video_id: YouTube video ID (e.g., 'dQw4w9WgXcQ')
         limit: Maximum comments to download (1-10000, default: 1000)
         sort: Sort order - 0 for popular/relevance, 1 for recent/time (default: 1)
-        api_key: YouTube Data API key (optional if YOUTUBE_API_KEY env var set)
     
     Returns:
         Dictionary with video_id, total_comments, comments array, and API metadata
     """
     try:
-        client = get_api_client(api_key)
+        client = get_api_client()
         request = CommentRequest(
             video_id=video_id,
             limit=limit,
@@ -356,8 +359,7 @@ async def download_youtube_comments_api(
 async def get_comment_stats_api(
     video_id: str,
     limit: int = 1000,
-    sort: int = 1,
-    api_key: str = None
+    sort: int = 1
 ) -> dict:
     """
     Get statistical analysis using YouTube Data API with 100% accurate metrics.
@@ -371,13 +373,12 @@ async def get_comment_stats_api(
         video_id: YouTube video ID (e.g., 'dQw4w9WgXcQ')  
         limit: Maximum comments to analyze (1-10000, default: 1000)
         sort: Sort order - 0 for popular, 1 for recent (default: 1)
-        api_key: YouTube Data API key (optional if env var set)
     
     Returns:
         Dictionary with accurate statistics and sample comments
     """
     try:
-        client = get_api_client(api_key)
+        client = get_api_client()
         request = CommentRequest(
             video_id=video_id,
             limit=limit,
@@ -417,8 +418,7 @@ async def search_comments_api(
     video_id: str,
     search_term: str,
     limit: int = 1000,
-    sort: int = 1,
-    api_key: str = None
+    sort: int = 1
 ) -> dict:
     """
     Search YouTube comments using the Data API for complete coverage and accurate results.
@@ -430,13 +430,12 @@ async def search_comments_api(
         search_term: Term to search for (case-insensitive)
         limit: Maximum comments to search through (1-10000, default: 1000)  
         sort: Sort order - 0 for popular, 1 for recent (default: 1)
-        api_key: YouTube Data API key (optional if env var set)
     
     Returns:
         Dictionary with matching comments and search metadata
     """
     try:
-        client = get_api_client(api_key)
+        client = get_api_client()
         request = CommentRequest(
             video_id=video_id,
             limit=limit,
@@ -484,8 +483,7 @@ async def search_comments_api(
 async def get_top_comments_by_likes_api(
     video_id: str,
     top_count: int = 10,
-    sample_size: int = None,
-    api_key: str = None
+    sample_size: int = None
 ) -> dict:
     """
     Get truly most-liked comments using YouTube Data API for accurate rankings.
@@ -501,7 +499,6 @@ async def get_top_comments_by_likes_api(
         video_id: YouTube video ID (e.g., 'dQw4w9WgXcQ')
         top_count: Number of top comments to return (1-100, default: 10)
         sample_size: Optional sample size (100-10000). If None, auto-sized for best coverage
-        api_key: YouTube Data API key (optional if env var set)
     
     Returns:
         Dictionary with top comments ranked by true like counts
@@ -510,7 +507,7 @@ async def get_top_comments_by_likes_api(
         if not 1 <= top_count <= 100:
             raise ToolError("top_count must be between 1 and 100")
         
-        client = get_api_client(api_key)
+        client = get_api_client()
         
         # Auto-sizing: Use maximum possible for best coverage
         if sample_size is None:
@@ -579,44 +576,24 @@ async def get_top_comments_by_likes_api(
         raise ToolError(f"Failed to get top comments via API: {str(e)}")
 
 @mcp.tool()
-async def get_youtube_api_quota_status(
-    api_key: str = None,
-    project_id: str = None,
-    service_account_path: str = None
-) -> dict:
+async def get_youtube_api_quota_status() -> dict:
     """
-    Check YouTube Data API quota usage with both session tracking and real quota checking.
+    Check YouTube Data API quota usage with session-based tracking.
     
-    QUOTA CHECKING METHODS:
-    1. Session tracking (always available): Tracks requests made in current session
-    2. Real quota checking (optional): Uses Google Service Usage API for actual usage
-    
-    For real quota checking, you need:
-    - Google Cloud project ID where API key was created
-    - Service account with Service Usage API permissions
-    - Service Usage API enabled in your project
-    
-    Args:
-        api_key: YouTube Data API key (optional if YOUTUBE_API_KEY env var set)
-        project_id: Google Cloud project ID for real quota checking (optional)
-        service_account_path: Path to service account JSON file (optional)
+    Tracks API quota usage within the current MCP server session.
+    Provides estimates and warnings about daily quota consumption.
     
     Returns:
-        Dictionary with session tracking, real quota data (if available), and guidance
+        Dictionary with session tracking, quota limits, and usage guidance
     """
     try:
-        client = get_api_client(api_key)
+        client = get_api_client()
         quota_status = client.get_quota_status()
         
         # Create QuotaStatus model for validation and properties
         status = QuotaStatus(**quota_status)
         
-        # Try to get real quota data if parameters provided
-        real_quota_data = None
-        if project_id:
-            real_quota_data = client._try_real_quota_check(project_id, service_account_path)
-        
-        result = {
+        return {
             "session_tracking": {
                 "requests_this_session": status.requests_made,
                 "estimated_quota_used": status.daily_usage,
@@ -632,37 +609,20 @@ async def get_youtube_api_quota_status(
             "session_estimates": {
                 "requests_remaining_estimate": max(0, 10000 - status.daily_usage),
                 "comments_remaining_estimate": max(0, (10000 - status.daily_usage) * 100)
-            }
-        }
-        
-        # Add real quota data if available
-        if real_quota_data:
-            result["real_quota_data"] = {
-                "source": "Google Service Usage API",
-                "metrics": real_quota_data,
-                "status": "✅ Real quota data retrieved successfully"
-            }
-        else:
-            result["real_quota_fallback"] = {
+            },
+            "real_quota_check": {
                 "method": "Google Cloud Console",
                 "url": "https://console.cloud.google.com/apis/api/youtube.googleapis.com/quotas",
-                "service_usage_api": "https://console.cloud.google.com/apis/library/serviceusage.googleapis.com",
-                "note": "Enable Service Usage API and provide project_id for real quota data"
-            }
-        
-        # Add appropriate warnings
-        if real_quota_data:
-            result["status"] = "✅ Real quota data available via Service Usage API"
-        else:
-            result["warnings"] = [
+                "note": "Check console for actual quota usage across all applications"
+            },
+            "warnings": [
                 "⚠️ Session tracking only - real quota not checked",
                 "⚠️ Other apps using same API key not counted", 
                 "⚠️ Previous sessions not counted",
-                "💡 Provide project_id + service_account_path for real quota data",
+                "✅ Check Google Cloud Console for true usage",
                 f"📊 Session usage: {status.usage_percentage:.1f}% of daily limit"
             ]
-        
-        return result
+        }
         
     except Exception as e:
         if isinstance(e, ToolError):
