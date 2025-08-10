@@ -161,30 +161,34 @@ class YouTubeAPIClient:
         """Parse a comment thread into YouTubeComment objects."""
         comments = []
         
-        # Main comment
-        top_comment = thread['snippet']['topLevelComment']['snippet']
-        
-        # Convert API response to our model format
-        comment_data = {
-            'cid': thread['snippet']['topLevelComment']['id'],
-            'text': top_comment['textDisplay'],
-            'time': top_comment['publishedAt'],
-            'time_parsed': time.mktime(time.strptime(
-                top_comment['publishedAt'][:19], '%Y-%m-%dT%H:%M:%S'
-            )),
-            'author': top_comment['authorDisplayName'],
-            'channel': top_comment.get('authorChannelId', {}).get('value', '') if top_comment.get('authorChannelId') else '',
-            'votes': str(top_comment.get('likeCount', 0)),
-            'replies': str(thread['snippet'].get('totalReplyCount', 0)),
-            'photo': top_comment.get('authorProfileImageUrl', ''),
-            'heart': False,  # API doesn't provide this info
-            'reply': False
-        }
-        
         try:
-            comments.append(YouTubeComment(**comment_data))
-        except Exception as e:
-            logger.warning(f"Failed to parse top-level comment {comment_data['cid']}: {e}")
+            logger.debug(f"Parsing thread: {thread.get('id', 'unknown')}")
+            
+            # Main comment
+            top_comment = thread['snippet']['topLevelComment']['snippet']
+            logger.debug(f"Top comment keys: {list(top_comment.keys())}")
+            
+            # Convert API response to our model format
+            comment_data = {
+                'cid': thread['snippet']['topLevelComment']['id'],
+                'text': top_comment['textDisplay'],
+                'time': top_comment['publishedAt'],
+                'time_parsed': time.mktime(time.strptime(
+                    top_comment['publishedAt'][:19], '%Y-%m-%dT%H:%M:%S'
+                )),
+                'author': top_comment['authorDisplayName'],
+                'channel': top_comment.get('authorChannelId', {}).get('value', '') if top_comment.get('authorChannelId') else '',
+                'votes': str(top_comment.get('likeCount', 0)),
+                'replies': str(thread['snippet'].get('totalReplyCount', 0)),
+                'photo': top_comment.get('authorProfileImageUrl', ''),
+                'heart': False,  # API doesn't provide this info
+                'reply': False
+            }
+        
+            try:
+                comments.append(YouTubeComment(**comment_data))
+            except Exception as e:
+                logger.warning(f"Failed to parse top-level comment {comment_data['cid']}: {e}")
         
         # Replies (if any)
         if 'replies' in thread:
@@ -211,6 +215,13 @@ class YouTubeAPIClient:
                     comments.append(YouTubeComment(**reply_data))
                 except Exception as e:
                     logger.warning(f"Failed to parse reply {reply_data['cid']}: {e}")
+            
+        except Exception as e:
+            logger.error(f"Error parsing comment thread: {str(e)}")
+            logger.error(f"Thread data: {thread}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            raise
         
         return comments
     
@@ -265,7 +276,10 @@ class YouTubeAPIClient:
             except ToolError:
                 raise  # Re-raise our custom errors
             except Exception as e:
-                raise ToolError(f"Unexpected error during comment download: {str(e)}")
+                import traceback
+                logger.error(f"Comment download error: {str(e)}")
+                logger.error(f"Traceback: {traceback.format_exc()}")
+                raise ToolError(f"Unexpected error during comment download: {str(e)}")  
         
         # Trim to exact limit if needed
         if len(all_comments) > request.limit:

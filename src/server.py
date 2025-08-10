@@ -387,6 +387,9 @@ def main():
     if args.debug:
         import logging
         logging.basicConfig(level=logging.DEBUG)
+        # Enable debug for our modules
+        logger = logging.getLogger('src.tools.youtube_api')
+        logger.setLevel(logging.DEBUG)
     
     if args.transport == 'sse':
         # Run with SSE transport for remote deployment
