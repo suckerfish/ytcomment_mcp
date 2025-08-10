@@ -30,29 +30,64 @@ def get_api_client() -> YouTubeAPIClient:
     return api_client
 
 @mcp.tool()
-async def download_youtube_comments(
+async def download_comments(
     video_id: str,
     limit: int = 1000,
-    sort: int = 1
+    sort: int = 1,
+    force_large_ingestion: bool = False
 ) -> dict:
     """
-    Download YouTube comments using the official YouTube Data API.
+    Download YouTube comments with smart warnings for large datasets.
     
-    Provides 100% reliable results with:
-    - Accurate like counts and engagement metrics
-    - Full comment coverage and dataset access
-    - True comment rankings by likes
-    - Reliable pagination and error handling
+    Primary comment download tool with intelligent context protection:
+    - Warns when requesting >1000 comments to prevent LLM context overflow
+    - Provides token usage analysis and context percentage estimates
+    - Suggests optimized alternatives for large requests
+    - Force override option for intentional large ingestion
+    - 100% accurate YouTube Data API results
     
     Args:
         video_id: YouTube video ID (e.g., 'dQw4w9WgXcQ')
         limit: Maximum comments to download (1-10000, default: 1000)
         sort: Sort order - 0 for popular/relevance, 1 for recent/time (default: 1)
+        force_large_ingestion: Bypass warnings for large datasets (default: False)
     
     Returns:
-        Dictionary with video_id, total_comments, comments array, and API metadata
+        Dictionary with comments, warnings, and token analysis
     """
     try:
+        if not 1 <= limit <= 10000:
+            raise ToolError("limit must be between 1 and 10000")
+        
+        # Calculate estimated token usage
+        estimated_tokens = limit * 25  # ~25 tokens per comment
+        
+        # Warning system for large ingestion
+        warnings = []
+        if limit > 1000 and not force_large_ingestion:
+            warnings.append(f"⚠️ Large dataset requested: {limit} comments (~{estimated_tokens:,} tokens)")
+            warnings.append(f"⚠️ This may exceed LLM context limits")
+            warnings.append(f"💡 Consider using search_comments or get_top_comments instead")
+            warnings.append(f"💡 Or set force_large_ingestion=true to proceed anyway")
+            
+            return {
+                "video_id": video_id,
+                "warning_triggered": True,
+                "requested_limit": limit,
+                "estimated_tokens": estimated_tokens,
+                "warnings": warnings,
+                "alternatives": {
+                    "search_comments": "Search for specific terms with limited results",
+                    "get_top_comments": "Get only the most popular comments",
+                    "force_override": "Set force_large_ingestion=true to proceed"
+                },
+                "recommendation": f"Use search_comments with max_results=50-200 or get_top_comments with top_count=25-100"
+            }
+        
+        if limit > 2000:
+            warnings.append(f"⚠️ Very large dataset: {limit} comments (~{estimated_tokens:,} tokens)")
+            warnings.append(f"📊 May consume significant LLM context")
+        
         client = get_api_client()
         request = CommentRequest(
             video_id=video_id,
@@ -63,14 +98,23 @@ async def download_youtube_comments(
         response = await client.download_comments(request)
         quota_status = client.get_quota_status()
         
+        # Calculate actual token usage
+        actual_tokens = len(response.comments) * 25
+        
         return {
             "video_id": response.video_id,
             "total_comments": response.total_comments,
             "comments": [comment.dict() for comment in response.comments],
             "request_params": response.request_params.dict(),
             "memory_usage_mb": round(response.memory_usage_mb, 2),
+            "token_analysis": {
+                "estimated_tokens": estimated_tokens,
+                "actual_tokens": actual_tokens,
+                "context_usage": f"~{round(actual_tokens / 128000 * 100, 1)}% of 128K context" if actual_tokens <= 128000 else "Exceeds 128K context",
+                "warnings": warnings if warnings else ["✅ Reasonable size for LLM ingestion"]
+            },
             "api_metadata": {
-                "quota_used": 1,  # commentThreads.list costs 1 unit per page
+                "quota_used": 1,
                 "quota_remaining": quota_status['remaining'],
                 "api_version": "v3",
                 "data_source": "YouTube Data API"
@@ -80,7 +124,7 @@ async def download_youtube_comments(
     except Exception as e:
         if isinstance(e, ToolError):
             raise
-        raise ToolError(f"Failed to download comments via API: {str(e)}")
+        raise ToolError(f"Failed to download comments: {str(e)}")
 
 @mcp.tool()
 async def get_comment_stats(
@@ -147,57 +191,104 @@ async def get_comment_stats(
 @mcp.tool()
 async def search_comments(
     video_id: str,
-    search_term: str,
-    limit: int = 1000,
-    sort: int = 1
+    search_terms: list[str],
+    max_results: int = 50,
+    search_limit: int = None,
+    case_sensitive: bool = False
 ) -> dict:
     """
-    Search YouTube comments for specific terms with complete coverage.
+    Server-side keyword search optimized for LLM ingestion.
     
-    Searches through the full available comment dataset with accurate results.
+    Searches through comments server-side and returns only matching results,
+    dramatically reducing token usage and improving LLM context efficiency:
+    - Multiple search terms with OR logic (matches any term)
+    - Server-side filtering before sending to LLM
+    - Configurable result limits for token optimization
+    - Case sensitivity options
+    - Auto-sorted by popularity for relevance
     
     Args:
         video_id: YouTube video ID (e.g., 'dQw4w9WgXcQ')
-        search_term: Term to search for (case-insensitive)
-        limit: Maximum comments to search through (1-10000, default: 1000)  
-        sort: Sort order - 0 for popular, 1 for recent (default: 1)
+        search_terms: List of terms to search for (OR logic - matches any term)
+        max_results: Maximum matching comments to return (1-500, default: 50)
+        search_limit: Maximum comments to search through (100-10000, auto-sized if None)
+        case_sensitive: Whether search should be case sensitive (default: False)
     
     Returns:
-        Dictionary with matching comments and search metadata
+        Dictionary with only matching comments and efficiency metrics
     """
     try:
+        if not isinstance(search_terms, list) or not search_terms:
+            raise ToolError("search_terms must be a non-empty list of strings")
+        
+        if not 1 <= max_results <= 500:
+            raise ToolError("max_results must be between 1 and 500")
+        
         client = get_api_client()
+        
+        # Auto-size search limit for better coverage
+        if search_limit is None:
+            search_limit = 5000  # Good balance of coverage vs speed
+        elif not 100 <= search_limit <= 10000:
+            raise ToolError("search_limit must be between 100 and 10000")
+        
+        # Download comments with popular sort for better search results
         request = CommentRequest(
             video_id=video_id,
-            limit=limit,
-            sort=sort
+            limit=search_limit,
+            sort=0  # Popular sort gives better quality results
         )
         
         response = await client.download_comments(request)
         quota_status = client.get_quota_status()
         
-        # Search through comments
-        search_term_lower = search_term.lower()
+        # Server-side filtering
         matching_comments = []
+        search_terms_processed = search_terms if case_sensitive else [term.lower() for term in search_terms]
         
         for comment in response.comments:
-            if search_term_lower in comment.text.lower():
+            comment_text = comment.text if case_sensitive else comment.text.lower()
+            
+            # Check if any search term matches (OR logic)
+            if any(term in comment_text for term in search_terms_processed):
                 matching_comments.append({
                     "author": comment.author,
                     "text": comment.text,
                     "likes": comment.likes_count,
+                    "replies": comment.replies_count,
                     "time": comment.time,
                     "is_reply": comment.reply,
                     "is_hearted": comment.heart
                 })
+                
+                # Limit results for LLM efficiency
+                if len(matching_comments) >= max_results:
+                    break
+        
+        # Sort by likes for most relevant results first
+        matching_comments.sort(key=lambda x: x['likes'], reverse=True)
         
         return {
-            "video_id": response.video_id,
-            "search_term": search_term,
-            "total_comments_searched": response.total_comments,
-            "matching_comments_count": len(matching_comments),
-            "matching_comments": matching_comments,
-            "match_percentage": round((len(matching_comments) / response.total_comments * 100), 2) if response.total_comments > 0 else 0,
+            "video_id": video_id,
+            "search_terms": search_terms,
+            "search_config": {
+                "case_sensitive": case_sensitive,
+                "search_logic": "OR (matches any term)",
+                "max_results": max_results,
+                "search_limit": search_limit
+            },
+            "results": {
+                "total_searched": response.total_comments,
+                "matches_found": len(matching_comments),
+                "matches_returned": min(len(matching_comments), max_results),
+                "match_rate": round((len(matching_comments) / response.total_comments * 100), 2) if response.total_comments > 0 else 0
+            },
+            "matching_comments": matching_comments[:max_results],
+            "efficiency_info": {
+                "token_reduction": f"~{round((1 - len(matching_comments) / response.total_comments) * 100, 1)}%",
+                "context_optimized": True,
+                "server_side_filtered": True
+            },
             "api_metadata": {
                 "quota_used": 1,
                 "quota_remaining": quota_status['remaining'],
@@ -208,34 +299,37 @@ async def search_comments(
     except Exception as e:
         if isinstance(e, ToolError):
             raise
-        raise ToolError(f"Failed to search comments via API: {str(e)}")
+        raise ToolError(f"Failed to search comments: {str(e)}")
 
 @mcp.tool()
-async def get_top_comments_by_likes(
+async def get_top_comments(
     video_id: str,
-    top_count: int = 10,
-    sample_size: int = None
+    top_count: int = 25,
+    sample_size: int = None,
+    min_likes: int = None,
+    include_replies: bool = True
 ) -> dict:
     """
-    Get the most popular, most liked, top-rated, or highest-engagement comments by actual like count.
+    Server-side popularity sorting optimized for LLM ingestion.
     
-    Use this when users ask for:
-    - "most popular comments"
-    - "most liked comments" 
-    - "top comments by likes/upvotes"
-    - "highest rated comments"
-    - "viral comments" 
-    - "best comments"
+    Gets the most popular/viral comments by actual like counts with advanced filtering:
+    - Server-side sorting by popularity before sending to LLM
+    - Advanced filtering options (min likes, reply inclusion)
+    - Token-optimized results for efficient LLM processing
+    - Finds viral comments with 1M+ likes
+    - 100% accurate YouTube Data API like counts
     
-    Finds the actual viral comments with accurate like counts (often 1M+ likes).
+    Use for: "most popular", "most liked", "viral comments", "best comments"
     
     Args:
         video_id: YouTube video ID (e.g., 'dQw4w9WgXcQ')
-        top_count: Number of top comments to return (1-100, default: 10)
-        sample_size: Optional sample size (100-10000). If None, auto-sized for best coverage
+        top_count: Number of top comments to return (1-100, default: 25)
+        sample_size: Comments to analyze (100-10000, auto-sized if None)
+        min_likes: Minimum likes to include (optional filter)
+        include_replies: Whether to include reply comments (default: True)
     
     Returns:
-        Dictionary with top comments ranked by true like counts
+        Dictionary with only the highest-voted comments and efficiency metrics
     """
     try:
         if not 1 <= top_count <= 100:
@@ -243,49 +337,62 @@ async def get_top_comments_by_likes(
         
         client = get_api_client()
         
-        # Auto-sizing: Use maximum possible for best coverage
+        # Auto-size for optimal coverage vs performance
         if sample_size is None:
-            sample_size = 10000
-            auto_sized = True
-        else:
-            if not 100 <= sample_size <= 10000:
-                raise ToolError("sample_size must be between 100 and 10000")
-            auto_sized = False
+            sample_size = 10000  # Maximum for best coverage
+        elif not 100 <= sample_size <= 10000:
+            raise ToolError("sample_size must be between 100 and 10000")
         
-        # Use popular sort to get best candidates for top comments
+        # Use popular sort to get the best candidates
         request = CommentRequest(
             video_id=video_id,
             limit=sample_size,
-            sort=0  # Popular sort for better top comment candidates
+            sort=0  # Popular sort for best candidates
         )
         
         response = await client.download_comments(request)
         quota_status = client.get_quota_status()
         
-        # Sort by actual like count
+        # Server-side filtering and sorting
+        filtered_comments = response.comments
+        
+        # Apply filters
+        if min_likes is not None:
+            filtered_comments = [c for c in filtered_comments if c.likes_count >= min_likes]
+        
+        if not include_replies:
+            filtered_comments = [c for c in filtered_comments if not c.reply]
+        
+        # Sort by likes (server-side)
         sorted_comments = sorted(
-            response.comments,
+            filtered_comments,
             key=lambda c: c.likes_count,
             reverse=True
         )
         
+        # Return only top N
         top_comments = sorted_comments[:top_count]
         
         return {
-            "video_id": response.video_id,
-            "top_count_requested": top_count,
-            "sample_size": response.total_comments,
-            "auto_sizing_info": {
-                "auto_sized": auto_sized,
-                "calculated_sample_size": sample_size,
-                "data_source": "YouTube Data API (100% accurate)"
+            "video_id": video_id,
+            "filtering": {
+                "top_count": top_count,
+                "sample_size_analyzed": response.total_comments,
+                "min_likes_filter": min_likes,
+                "include_replies": include_replies
+            },
+            "results": {
+                "comments_analyzed": len(filtered_comments),
+                "top_comments_returned": len(top_comments),
+                "highest_likes": top_comments[0].likes_count if top_comments else 0,
+                "lowest_likes": top_comments[-1].likes_count if top_comments else 0
             },
             "top_comments": [
                 {
                     "rank": i + 1,
                     "author": comment.author,
                     "text": comment.text,
-                    "likes": comment.likes_count,  # Guaranteed accurate
+                    "likes": comment.likes_count,
                     "replies": comment.replies_count,
                     "time": comment.time,
                     "is_reply": comment.reply,
@@ -293,9 +400,10 @@ async def get_top_comments_by_likes(
                 }
                 for i, comment in enumerate(top_comments)
             ],
-            "like_range": {
-                "highest": top_comments[0].likes_count if top_comments else 0,
-                "lowest": top_comments[-1].likes_count if top_comments else 0
+            "efficiency_info": {
+                "token_reduction": f"~{round((1 - len(top_comments) / response.total_comments) * 100, 1)}%",
+                "context_optimized": True,
+                "server_side_sorted": True
             },
             "api_metadata": {
                 "quota_used": 1,
@@ -307,7 +415,7 @@ async def get_top_comments_by_likes(
     except Exception as e:
         if isinstance(e, ToolError):
             raise
-        raise ToolError(f"Failed to get top comments via API: {str(e)}")
+        raise ToolError(f"Failed to get top comments: {str(e)}")
 
 @mcp.tool()
 async def get_quota_status() -> dict:
@@ -364,6 +472,9 @@ async def get_quota_status() -> dict:
         if isinstance(e, ToolError):
             raise
         raise ToolError(f"Failed to check quota status: {str(e)}")
+
+
+
 
 def parse_arguments():
     """Parse command-line arguments."""

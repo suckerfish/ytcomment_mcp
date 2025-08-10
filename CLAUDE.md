@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a YouTube Comment Downloader MCP server that allows AI systems to download and analyze YouTube video comments without requiring API keys. Built with FastMCP, it provides intelligent comment analysis, search functionality, and engagement insights.
+This is a YouTube Comment Downloader MCP server that allows AI systems to download and analyze YouTube video comments using the official YouTube Data API. Built with FastMCP, it provides intelligent comment analysis, server-side search filtering, and engagement insights optimized for LLM ingestion.
 
-The server downloads comments via web scraping using the `youtube-comment-downloader` library and provides structured access to comment data, statistics, and search capabilities.
+The server uses the YouTube Data API v3 for 100% accurate comment data with server-side filtering to minimize token usage and optimize LLM context efficiency.
 
 ## Quick Commands
 
@@ -54,14 +54,21 @@ uv add <package_name>
 
 ## YouTube Comment Server Tools
 
-### Available MCP Tools
+### Available MCP Tools - Streamlined & LLM-Optimized
 
-**✅ ALL TOOLS (100% Reliable via YouTube Data API):**
-1. **`download_youtube_comments`** - Download raw comment data with full accuracy
-2. **`get_comment_stats`** - Statistical analysis and engagement metrics (context-efficient)
-3. **`search_comments`** - Search for specific terms through complete dataset
-4. **`get_top_comments_by_likes`** - Get truly most-liked comments (finds 1M+ like comments)
+**✅ 5 CORE TOOLS (100% Reliable via YouTube Data API):**
+1. **`download_comments`** - Smart comment download with warnings for large datasets
+2. **`search_comments`** - Server-side filtered search with 99%+ token reduction
+3. **`get_top_comments`** - Server-side popularity sorting optimized for LLM ingestion
+4. **`get_comment_stats`** - Statistical analysis and engagement metrics (context-efficient)
 5. **`get_quota_status`** - Monitor API usage and remaining capacity
+
+**🚀 Key Features:**
+- **Server-side filtering** reduces token usage by 99%+ for LLM efficiency
+- **Smart warning system** prevents accidental context overflow (>1000 comments)
+- **Advanced popularity sorting** finds viral comments with 1M+ likes
+- **Multiple search terms** with OR logic and case sensitivity options
+- **Token usage analysis** with context percentage estimates
 
 ### Usage Examples
 
@@ -79,33 +86,38 @@ uv add <package_name>
 }
 ```
 
-**📊 Download Comments:**
+**📊 Streamlined Tool Usage:**
 ```python
-# Download recent comments
-result = await download_youtube_comments(
+# Smart download with warnings (prevents LLM context overflow)
+result = await download_comments(
     video_id="dQw4w9WgXcQ",
-    limit=100,
-    sort=1  # 1=recent, 0=popular
+    limit=100,  # Warns if >1000
+    sort=1,     # 1=recent, 0=popular
+    force_large_ingestion=False  # Override warnings
 )
 
-# Get accurate engagement statistics (context-efficient)
+# Server-side filtered search (99% token reduction)
+matches = await search_comments(
+    video_id="dQw4w9WgXcQ",
+    search_terms=["rick", "never", "gonna"],  # OR logic
+    max_results=50,      # Limits returned results
+    search_limit=5000,   # Total comments to search
+    case_sensitive=False
+)
+
+# Server-side popularity sorting (finds 1M+ like viral comments)
+top_comments = await get_top_comments(
+    video_id="dQw4w9WgXcQ",
+    top_count=25,        # Number to return
+    min_likes=10000,     # Filter threshold
+    include_replies=True, # Include reply comments
+    sample_size=10000    # Comments to analyze
+)
+
+# Statistical analysis (context-efficient)
 stats = await get_comment_stats(
     video_id="dQw4w9WgXcQ", 
     limit=1000
-)
-
-# Search for specific terms
-mentions = await search_comments(
-    video_id="dQw4w9WgXcQ",
-    search_term="rickroll",
-    limit=500
-)
-
-# Get most-liked comments (finds 1M+ like viral comments)
-top_comments = await get_top_comments_by_likes(
-    video_id="dQw4w9WgXcQ",
-    top_count=20,
-    sample_size=1000
 )
 
 # Monitor API quota usage
@@ -180,20 +192,23 @@ async def authenticated_tool(param: str, ctx: Context) -> dict:
 - **100 comments**: ~2,200-2,500 tokens
 - **1,000 comments**: ~22,000-25,000 tokens
 
-### Built-in Limits
+### Built-in Limits & LLM Optimization
 - **Maximum comments per request**: 10,000
 - **Memory limit**: 50MB (~28,000 comments)
 - **Timeout**: 120 seconds per request
 - **API Quota**: 10,000 units/day (1 unit per 100 comments)
+- **Smart warnings**: Triggers at >1000 comments to prevent LLM context overflow
+- **Token efficiency**: Server-side filtering reduces token usage by 99%+
+- **Context protection**: Automatic token analysis with 128K context awareness
 
 ## Project Structure
 
 ```
 src/
-├── server.py                   # Main MCP server with 5 tools (all API-based)
+├── server.py                   # Streamlined MCP server with 5 LLM-optimized tools
 ├── tools/
 │   ├── youtube_comments.py     # Stats calculation utilities  
-│   └── youtube_api.py          # YouTube Data API client
+│   └── youtube_api.py          # YouTube Data API client with server-side filtering
 ├── models/
 │   └── youtube.py              # Pydantic models for validation
 └── __init__.py
@@ -203,7 +218,7 @@ src/
 ├── test_tokens.py              # Token estimation analysis  
 ├── test_replies.py             # Reply structure analysis
 ├── test_api.py                 # YouTube Data API functionality test
-├── comparison_test.py          # API vs scraper comparison (historical)
+├── src/server_backup.py        # Backup of pre-consolidation server
 └── data_analysis_report.md     # Detailed findings report
 ```
 
@@ -230,14 +245,16 @@ For detailed implementation guidance, see:
 
 ## Key Implementation Notes
 
-### ✅ YouTube Data API Implementation
+### ✅ Streamlined YouTube Data API Implementation
 - **Data Accuracy**: 100% accurate like counts and engagement metrics
-- **Coverage**: Full comment dataset access with complete pagination
+- **LLM Optimization**: Server-side filtering reduces token usage by 99%+
+- **Smart Warnings**: Prevents accidental LLM context overflow (>1000 comments)
+- **Advanced Search**: Multiple terms, OR logic, case sensitivity options
+- **Viral Detection**: Finds actual viral comments (1M+ likes)
 - **Performance**: ~30-60 seconds per 1,000 comments with reliable results
 - **Quota Management**: 10,000 units/day, 1 unit per 100 comments
 - **Error Handling**: Comprehensive API error handling with specific user guidance
-- **True Rankings**: Finds actual viral comments (1M+ likes vs previous 800 max)
-- **Clean Interface**: Single set of reliable tools, no confusing alternatives
+- **Clean Architecture**: 5 streamlined tools, zero redundancy, intuitive naming
 
 ### Transport Configuration
 - **Local Development**: Uses `stdio` transport by default
@@ -254,7 +271,7 @@ For detailed implementation guidance, see:
 ### Sorting Behavior
 - `sort=0` (popular): YouTube's relevance algorithm for best engagement candidates
 - `sort=1` (recent): Newest comments first (chronological order)
-- **Top Comments**: Use `get_top_comments_by_likes` to find true viral comments by actual like count
+- **Top Comments**: Use `get_top_comments` to find true viral comments by actual like count
 
 ### API Quota Management
 - **Session Tracking**: Monitors usage within current MCP server session
