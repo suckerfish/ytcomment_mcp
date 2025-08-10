@@ -120,6 +120,7 @@ class YouTubeAPIClient:
         self.quota_manager.check_quota(1)  # commentThreads.list costs 1 unit
         
         try:
+            logger.debug(f"Making API request for video: {video_id}")
             request = service.commentThreads().list(
                 part='snippet,replies',
                 videoId=video_id,
@@ -127,7 +128,15 @@ class YouTubeAPIClient:
                 order=order,
                 pageToken=page_token
             )
+            logger.debug(f"Request created: {request}")
             response = request.execute()
+            logger.debug(f"Response received: {type(response)}, keys: {list(response.keys()) if response else 'None'}")
+            
+            # Validate response
+            if response is None:
+                raise ToolError("YouTube API returned empty response")
+            if 'items' not in response:
+                raise ToolError("YouTube API response missing 'items' field")
             
             # Record quota usage
             self.quota_manager.record_usage(1)
@@ -136,6 +145,8 @@ class YouTubeAPIClient:
             
         except HttpError as e:
             self._handle_api_error(e)
+            # _handle_api_error always raises ToolError, so this line should never be reached
+            raise ToolError(f"API error handling failed: {str(e)}")  
         except Exception as e:
             raise ToolError(f"Unexpected API error: {str(e)}")
     
@@ -254,6 +265,10 @@ class YouTubeAPIClient:
                     page_token=next_page_token,
                     order=order
                 )
+                
+                # Add explicit None check
+                if response is None:
+                    raise ToolError("API returned None response - check API key and video ID")
                 
                 if 'items' not in response or not response['items']:
                     break  # No more comments
