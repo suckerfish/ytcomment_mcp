@@ -56,20 +56,14 @@ uv add <package_name>
 
 ### Available MCP Tools
 
-**🔧 SCRAPER-BASED TOOLS (Legacy - Unreliable):**
-1. **`download_youtube_comments`** - Download raw comment data (35% data loss, corrupted like counts)
-2. **`get_comment_stats`** - Get statistical analysis (based on corrupted data)
-3. **`search_comments`** - Search for specific terms (limited dataset)
-4. **`get_top_comments_by_likes`** - Get top comments (shows wrong comments due to data corruption)
+**✅ ALL TOOLS (100% Reliable via YouTube Data API):**
+1. **`download_youtube_comments`** - Download raw comment data with full accuracy
+2. **`get_comment_stats`** - Statistical analysis and engagement metrics (context-efficient)
+3. **`search_comments`** - Search for specific terms through complete dataset
+4. **`get_top_comments_by_likes`** - Get truly most-liked comments (finds 1M+ like comments)
+5. **`get_quota_status`** - Monitor API usage and remaining capacity
 
-**✅ API-BASED TOOLS (Recommended - 100% Reliable):**
-1. **`download_youtube_comments_api`** - Download with YouTube Data API (100% accurate)
-2. **`get_comment_stats_api`** - Statistical analysis with real data
-3. **`search_comments_api`** - Search through complete comment dataset
-4. **`get_top_comments_by_likes_api`** - True most-liked comments (1M+ likes vs scraper's ~800 max)
-5. **`get_youtube_api_quota_status`** - Monitor API usage and quota consumption
-
-### ✅ Recommended API Usage Examples
+### Usage Examples
 
 **🔑 MCP Client Configuration:**
 ```json
@@ -85,43 +79,37 @@ uv add <package_name>
 }
 ```
 
-**📊 Download Comments (100% Accurate):**
+**📊 Download Comments:**
 ```python
-# Download recent comments with API
-result = await download_youtube_comments_api(
+# Download recent comments
+result = await download_youtube_comments(
     video_id="dQw4w9WgXcQ",
     limit=100,
     sort=1  # 1=recent, 0=popular
 )
 
-# Get accurate engagement statistics
-stats = await get_comment_stats_api(
+# Get accurate engagement statistics (context-efficient)
+stats = await get_comment_stats(
     video_id="dQw4w9WgXcQ", 
     limit=1000
 )
 
-# Search through complete dataset
-mentions = await search_comments_api(
+# Search for specific terms
+mentions = await search_comments(
     video_id="dQw4w9WgXcQ",
     search_term="rickroll",
     limit=500
 )
 
-# Get REAL most-liked comments (finds 1M+ like comments)
-top_comments = await get_top_comments_by_likes_api(
+# Get most-liked comments (finds 1M+ like viral comments)
+top_comments = await get_top_comments_by_likes(
     video_id="dQw4w9WgXcQ",
     top_count=20,
     sample_size=1000
 )
 
 # Monitor API quota usage
-quota = await get_youtube_api_quota_status()
-```
-
-### 🔧 Legacy Scraper Usage (Not Recommended)
-```python
-# Only use if API quota exhausted or API key unavailable
-result = await download_youtube_comments(video_id="dQw4w9WgXcQ", limit=100)
+quota = await get_quota_status()
 ```
 
 ### Input Validation with Pydantic
@@ -202,32 +190,29 @@ async def authenticated_tool(param: str, ctx: Context) -> dict:
 
 ```
 src/
-├── server.py                   # Main MCP server with 9 tools (4 scraper + 5 API)
+├── server.py                   # Main MCP server with 5 tools (all API-based)
 ├── tools/
-│   ├── youtube_comments.py     # Legacy comment scraping (unreliable)
-│   └── youtube_api.py          # YouTube Data API client (reliable)
+│   ├── youtube_comments.py     # Stats calculation utilities  
+│   └── youtube_api.py          # YouTube Data API client
 ├── models/
-│   └── youtube.py              # Pydantic models for both scraper and API
+│   └── youtube.py              # Pydantic models for validation
 └── __init__.py
 
 # Test files (project root)
 ├── test_server.py              # Basic functionality test
 ├── test_tokens.py              # Token estimation analysis  
 ├── test_replies.py             # Reply structure analysis
-├── test_top_likes.py           # Top comments by likes test (scraper)
 ├── test_api.py                 # YouTube Data API functionality test
-├── test_api_tools.py           # API-based MCP tools test
-├── test_server_api.py          # MCP server API integration test
-├── comparison_test.py          # Scraper vs API comparison
+├── comparison_test.py          # API vs scraper comparison (historical)
 └── data_analysis_report.md     # Detailed findings report
 ```
 
 ## Essential Dependencies
 
 - `fastmcp>=0.2.0` - MCP server framework
-- `youtube-comment-downloader` - Legacy comment scraping (unreliable)
-- `google-api-python-client>=2.178.0` - YouTube Data API client (reliable)
+- `google-api-python-client>=2.178.0` - YouTube Data API client
 - `google-auth>=2.40.3` - Google API authentication
+- `python-dotenv>=1.1.0` - Environment variable loading
 - `pydantic>=2.0.0` - Data validation and models
 - `aiohttp>=3.8.0` - Async HTTP client
 
@@ -245,19 +230,14 @@ For detailed implementation guidance, see:
 
 ## Key Implementation Notes
 
-### ✅ YouTube Data API Implementation (Recommended)
+### ✅ YouTube Data API Implementation
 - **Data Accuracy**: 100% accurate like counts and engagement metrics
-- **Coverage**: Full comment dataset access (vs scraper's 35% data loss)
-- **Performance**: ~30-60 seconds per 1,000 comments with reliable pagination
+- **Coverage**: Full comment dataset access with complete pagination
+- **Performance**: ~30-60 seconds per 1,000 comments with reliable results
 - **Quota Management**: 10,000 units/day, 1 unit per 100 comments
 - **Error Handling**: Comprehensive API error handling with specific user guidance
-- **True Rankings**: Finds actual viral comments (1M+ likes vs scraper's corrupted 800 max)
-
-### 🔧 Legacy Scraper (Fallback Only)
-- **Data Quality**: ❌ 35% data loss, corrupted like counts showing 0 instead of thousands
-- **Coverage**: ❌ Limited to ~1,800 comments on popular videos (vs 5,000+ actual)
-- **Reliability**: ❌ Frequent failures, timeout issues, missing top comments
-- **Use Cases**: Only when API quota exhausted or no API key available
+- **True Rankings**: Finds actual viral comments (1M+ likes vs previous 800 max)
+- **Clean Interface**: Single set of reliable tools, no confusing alternatives
 
 ### Transport Configuration
 - **Local Development**: Uses `stdio` transport by default
@@ -272,9 +252,9 @@ For detailed implementation guidance, see:
 - Only boolean `reply` field distinguishes comment types
 
 ### Sorting Behavior
-- `sort=0` (popular): YouTube's relevance algorithm (API) vs corrupted popular (scraper)
-- `sort=1` (recent): Newest comments first
-- **Critical**: Use `get_top_comments_by_likes_api` for true viral comments, not scraper version
+- `sort=0` (popular): YouTube's relevance algorithm for best engagement candidates
+- `sort=1` (recent): Newest comments first (chronological order)
+- **Top Comments**: Use `get_top_comments_by_likes` to find true viral comments by actual like count
 
 ### API Quota Management
 - **Session Tracking**: Monitors usage within current MCP server session
