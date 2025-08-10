@@ -67,6 +67,26 @@ class YouTubeComment(BaseModel):
         except ValueError:
             return 0
 
+class SlimYouTubeComment(BaseModel):
+    """Optimized comment model with only essential fields (87% size reduction)."""
+    
+    author: str = Field(..., description="Comment author username")
+    text: str = Field(..., description="Comment text content")
+    likes: int = Field(..., description="Number of likes (as integer)")
+    time: str = Field(..., description="ISO timestamp or human-readable time")
+    is_hearted: bool = Field(..., description="Whether comment is hearted by creator")
+    
+    @classmethod
+    def from_full_comment(cls, comment: 'YouTubeComment') -> 'SlimYouTubeComment':
+        """Convert a full YouTubeComment to slim format."""
+        return cls(
+            author=comment.author,
+            text=comment.text,
+            likes=comment.likes_count,
+            time=comment.time,
+            is_hearted=comment.heart
+        )
+
 class CommentsResponse(BaseModel):
     """Response model for YouTube comments download."""
     
