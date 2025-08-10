@@ -135,3 +135,42 @@ class MetadataRequest(BaseModel):
         if not re.match(r'^[a-zA-Z0-9_-]{11,20}$', v):
             raise ValueError('Invalid YouTube video ID format')
         return v
+
+class APICommentRequest(CommentRequest):
+    """Request model for API-based comment downloading."""
+    
+    use_api: bool = Field(
+        default=True,
+        description="Use YouTube Data API instead of scraper"
+    )
+    api_key: Optional[str] = Field(
+        default=None,
+        description="YouTube Data API key (optional if set in environment)"
+    )
+
+class APICommentsResponse(CommentsResponse):
+    """Response model for API-based comments with additional metadata."""
+    
+    quota_used: int = Field(..., description="API quota units used for this request")
+    next_page_token: Optional[str] = Field(None, description="Token for next page of results")
+    total_available: Optional[int] = Field(None, description="Total comments available (if known)")
+    api_version: str = Field(default="v3", description="YouTube API version used")
+
+class QuotaStatus(BaseModel):
+    """Model for YouTube API quota status."""
+    
+    daily_usage: int = Field(..., description="Quota units used today")
+    daily_limit: int = Field(..., description="Daily quota limit")
+    requests_made: int = Field(..., description="Number of API requests made today")
+    remaining: int = Field(..., description="Remaining quota units")
+    reset_time: float = Field(..., description="Unix timestamp when quota resets")
+    
+    @property
+    def usage_percentage(self) -> float:
+        """Get quota usage as percentage."""
+        return (self.daily_usage / self.daily_limit) * 100 if self.daily_limit > 0 else 0
+    
+    @property
+    def is_near_limit(self) -> bool:
+        """Check if quota usage is near the daily limit (>80%)."""
+        return self.usage_percentage > 80

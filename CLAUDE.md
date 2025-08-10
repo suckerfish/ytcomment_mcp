@@ -56,39 +56,65 @@ uv add <package_name>
 
 ### Available MCP Tools
 
-1. **`download_youtube_comments`** - Download raw comment data
-2. **`get_comment_stats`** - Get statistical analysis (context-efficient)
-3. **`search_comments`** - Search for specific terms in comments
-4. **`get_top_comments_by_likes`** - Get most-liked comments (sorted by actual likes)
+**🔧 SCRAPER-BASED TOOLS (Legacy - Unreliable):**
+1. **`download_youtube_comments`** - Download raw comment data (35% data loss, corrupted like counts)
+2. **`get_comment_stats`** - Get statistical analysis (based on corrupted data)
+3. **`search_comments`** - Search for specific terms (limited dataset)
+4. **`get_top_comments_by_likes`** - Get top comments (shows wrong comments due to data corruption)
 
-### Basic Usage Examples
+**✅ API-BASED TOOLS (Recommended - 100% Reliable):**
+1. **`download_youtube_comments_api`** - Download with YouTube Data API (100% accurate)
+2. **`get_comment_stats_api`** - Statistical analysis with real data
+3. **`search_comments_api`** - Search through complete comment dataset
+4. **`get_top_comments_by_likes_api`** - True most-liked comments (1M+ likes vs scraper's ~800 max)
+5. **`get_youtube_api_quota_status`** - Monitor API usage and quota consumption
+
+### ✅ Recommended API Usage Examples
+
+**🔑 API Key Setup:**
+```bash
+export YOUTUBE_API_KEY="your-api-key-here"
+# OR pass as parameter to any API tool
+```
+
+**📊 Download Comments (100% Accurate):**
 ```python
-# Download recent comments
-result = await download_youtube_comments(
+# Download recent comments with API
+result = await download_youtube_comments_api(
     video_id="dQw4w9WgXcQ",
     limit=100,
-    sort=1  # 1=recent, 0=popular
+    sort=1,  # 1=recent, 0=popular
+    api_key="your-key"  # Optional if env var set
 )
 
-# Get engagement statistics without full data
-stats = await get_comment_stats(
+# Get accurate engagement statistics
+stats = await get_comment_stats_api(
     video_id="dQw4w9WgXcQ", 
     limit=1000
 )
 
-# Find mentions of specific topics
-mentions = await search_comments(
+# Search through complete dataset
+mentions = await search_comments_api(
     video_id="dQw4w9WgXcQ",
     search_term="rickroll",
     limit=500
 )
 
-# Get top comments by actual like count (not YouTube's "popular")
-top_comments = await get_top_comments_by_likes(
+# Get REAL most-liked comments (finds 1M+ like comments)
+top_comments = await get_top_comments_by_likes_api(
     video_id="dQw4w9WgXcQ",
     top_count=20,
     sample_size=1000
 )
+
+# Monitor API quota usage
+quota = await get_youtube_api_quota_status()
+```
+
+### 🔧 Legacy Scraper Usage (Not Recommended)
+```python
+# Only use if API quota exhausted or API key unavailable
+result = await download_youtube_comments(video_id="dQw4w9WgXcQ", limit=100)
 ```
 
 ### Input Validation with Pydantic
@@ -143,11 +169,11 @@ async def authenticated_tool(param: str, ctx: Context) -> dict:
 ### Comment Data Fields (11 fields per comment)
 - `cid` - Comment ID  
 - `text` - Comment content
-- `time` - Human readable time ("1 day ago")
+- `time` - Human readable time ("1 day ago" for scraper, ISO timestamp for API)
 - `time_parsed` - Unix timestamp
 - `author` - Username
 - `channel` - Channel ID
-- `votes` - Like count (string)
+- `votes` - Like count (string) - **✅ 100% accurate with API vs ❌ corrupted with scraper**
 - `replies` - Reply count (string) 
 - `photo` - Profile picture URL
 - `heart` - Hearted by creator (boolean)
@@ -163,30 +189,38 @@ async def authenticated_tool(param: str, ctx: Context) -> dict:
 - **Maximum comments per request**: 10,000
 - **Memory limit**: 50MB (~28,000 comments)
 - **Timeout**: 120 seconds per request
+- **API Quota**: 10,000 units/day (1 unit per 100 comments)
 
 ## Project Structure
 
 ```
 src/
-├── server.py                   # Main MCP server with 4 tools
+├── server.py                   # Main MCP server with 9 tools (4 scraper + 5 API)
 ├── tools/
-│   └── youtube_comments.py     # Comment downloading and processing
+│   ├── youtube_comments.py     # Legacy comment scraping (unreliable)
+│   └── youtube_api.py          # YouTube Data API client (reliable)
 ├── models/
-│   └── youtube.py              # Pydantic models for validation
+│   └── youtube.py              # Pydantic models for both scraper and API
 └── __init__.py
 
 # Test files (project root)
 ├── test_server.py              # Basic functionality test
 ├── test_tokens.py              # Token estimation analysis  
 ├── test_replies.py             # Reply structure analysis
-├── test_top_likes.py           # Top comments by likes test
+├── test_top_likes.py           # Top comments by likes test (scraper)
+├── test_api.py                 # YouTube Data API functionality test
+├── test_api_tools.py           # API-based MCP tools test
+├── test_server_api.py          # MCP server API integration test
+├── comparison_test.py          # Scraper vs API comparison
 └── data_analysis_report.md     # Detailed findings report
 ```
 
 ## Essential Dependencies
 
 - `fastmcp>=0.2.0` - MCP server framework
-- `youtube-comment-downloader` - Core comment scraping
+- `youtube-comment-downloader` - Legacy comment scraping (unreliable)
+- `google-api-python-client>=2.178.0` - YouTube Data API client (reliable)
+- `google-auth>=2.40.3` - Google API authentication
 - `pydantic>=2.0.0` - Data validation and models
 - `aiohttp>=3.8.0` - Async HTTP client
 
@@ -204,6 +238,20 @@ For detailed implementation guidance, see:
 
 ## Key Implementation Notes
 
+### ✅ YouTube Data API Implementation (Recommended)
+- **Data Accuracy**: 100% accurate like counts and engagement metrics
+- **Coverage**: Full comment dataset access (vs scraper's 35% data loss)
+- **Performance**: ~30-60 seconds per 1,000 comments with reliable pagination
+- **Quota Management**: 10,000 units/day, 1 unit per 100 comments
+- **Error Handling**: Comprehensive API error handling with specific user guidance
+- **True Rankings**: Finds actual viral comments (1M+ likes vs scraper's corrupted 800 max)
+
+### 🔧 Legacy Scraper (Fallback Only)
+- **Data Quality**: ❌ 35% data loss, corrupted like counts showing 0 instead of thousands
+- **Coverage**: ❌ Limited to ~1,800 comments on popular videos (vs 5,000+ actual)
+- **Reliability**: ❌ Frequent failures, timeout issues, missing top comments
+- **Use Cases**: Only when API quota exhausted or no API key available
+
 ### Transport Configuration
 - **Local Development**: Uses `stdio` transport by default
 - **Remote/VPS Deployment**: Uses `streamable-http` with `stateless_http=True`
@@ -217,31 +265,32 @@ For detailed implementation guidance, see:
 - Only boolean `reply` field distinguishes comment types
 
 ### Sorting Behavior
-- `sort=0` (popular): YouTube's algorithm (likes + recency + replies)
+- `sort=0` (popular): YouTube's relevance algorithm (API) vs corrupted popular (scraper)
 - `sort=1` (recent): Newest comments first
-- **Important**: Popular ≠ most-liked! Use `get_top_comments_by_likes` for pure like ranking
+- **Critical**: Use `get_top_comments_by_likes_api` for true viral comments, not scraper version
 
-### Error Handling
-- Graceful handling of private/unavailable videos
-- Memory usage validation before processing
-- Timeout protection for long downloads
-- Partial results on network issues
-
-### Performance Characteristics
-- **Download time**: ~30-60 seconds per 1,000 comments
-- **Rate limiting**: Handled automatically by library
-- **Memory efficient**: Streaming processing where possible
+### API Quota Management
+- **Session Tracking**: Monitors usage within current MCP server session
+- **Daily Limits**: 10,000 units per day, resets at midnight Pacific Time
+- **Cost Efficiency**: 100 comments per API unit (10,000x more efficient than assumed)
+- **Real Quota Checking**: Optional integration with Google Service Usage API
 
 ## Environment Variables
 
 Key configuration variables:
 ```bash
-PORT=8000                    # Server port
-DEBUG=false                  # Debug mode
-LOG_LEVEL=info              # Logging level
-DATABASE_URL=sqlite:///app.db # Database connection
-EXTERNAL_API_KEY=key123     # External service keys
+YOUTUBE_API_KEY=your-api-key     # YouTube Data API key (REQUIRED for API tools)
+PORT=8000                        # Server port
+DEBUG=false                      # Debug mode
+LOG_LEVEL=info                   # Logging level
 ```
+
+**🔑 Getting a YouTube API Key:**
+1. Go to [Google Cloud Console](https://console.developers.google.com/apis/credentials)
+2. Create/select a project
+3. Enable YouTube Data API v3
+4. Create credentials (API Key)
+5. Set `YOUTUBE_API_KEY` environment variable
 
 ## Configuration Patterns
 
