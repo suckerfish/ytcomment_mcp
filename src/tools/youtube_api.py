@@ -189,32 +189,32 @@ class YouTubeAPIClient:
                 comments.append(YouTubeComment(**comment_data))
             except Exception as e:
                 logger.warning(f"Failed to parse top-level comment {comment_data['cid']}: {e}")
-        
-        # Replies (if any)
-        if 'replies' in thread:
-            for reply in thread['replies']['comments']:
-                reply_snippet = reply['snippet']
-                
-                reply_data = {
-                    'cid': reply['id'],
-                    'text': reply_snippet['textDisplay'],
-                    'time': reply_snippet['publishedAt'],
-                    'time_parsed': time.mktime(time.strptime(
-                        reply_snippet['publishedAt'][:19], '%Y-%m-%dT%H:%M:%S'
-                    )),
-                    'author': reply_snippet['authorDisplayName'],
-                    'channel': reply_snippet.get('authorChannelId', {}).get('value', '') if reply_snippet.get('authorChannelId') else '',
-                    'votes': str(reply_snippet.get('likeCount', 0)),
-                    'replies': '0',  # Replies to replies aren't included
-                    'photo': reply_snippet.get('authorProfileImageUrl', ''),
-                    'heart': False,  # API doesn't provide this info
-                    'reply': True
-                }
-                
-                try:
-                    comments.append(YouTubeComment(**reply_data))
-                except Exception as e:
-                    logger.warning(f"Failed to parse reply {reply_data['cid']}: {e}")
+            
+            # Replies (if any)
+            if 'replies' in thread:
+                for reply in thread['replies']['comments']:
+                    reply_snippet = reply['snippet']
+                    
+                    reply_data = {
+                        'cid': reply['id'],
+                        'text': reply_snippet['textDisplay'],
+                        'time': reply_snippet['publishedAt'],
+                        'time_parsed': time.mktime(time.strptime(
+                            reply_snippet['publishedAt'][:19], '%Y-%m-%dT%H:%M:%S'
+                        )),
+                        'author': reply_snippet['authorDisplayName'],
+                        'channel': reply_snippet.get('authorChannelId', {}).get('value', '') if reply_snippet.get('authorChannelId') else '',
+                        'votes': str(reply_snippet.get('likeCount', 0)),
+                        'replies': '0',  # Replies to replies aren't included
+                        'photo': reply_snippet.get('authorProfileImageUrl', ''),
+                        'heart': False,  # API doesn't provide this info
+                        'reply': True
+                    }
+                    
+                    try:
+                        comments.append(YouTubeComment(**reply_data))
+                    except Exception as e:
+                        logger.warning(f"Failed to parse reply {reply_data['cid']}: {e}")
             
         except Exception as e:
             logger.error(f"Error parsing comment thread: {str(e)}")
