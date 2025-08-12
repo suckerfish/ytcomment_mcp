@@ -102,6 +102,11 @@ async def download_comments(
         response = await client.download_comments(request)
         quota_status = client.get_quota_status()
         
+        # Get total comment count from video info for comparison
+        video_request = MetadataRequest(video_id=video_id)
+        video_metadata = await client.get_video_info(video_request)
+        total_video_comments = video_metadata.comment_count or 0
+        
         # Convert comments to appropriate format
         if slim:
             comments_data = [SlimYouTubeComment.from_full_comment(comment).dict() for comment in response.comments]
@@ -113,6 +118,8 @@ async def download_comments(
         return {
             "video_id": response.video_id,
             "total_comments": response.total_comments,
+            "total_video_comments": total_video_comments,
+            "api_accessibility": f"{response.total_comments}/{total_video_comments} ({round(response.total_comments/total_video_comments*100, 1)}%)" if total_video_comments > 0 else "N/A",
             "comments": comments_data,
             "format": "slim" if slim else "full",
             "request_params": response.request_params.dict(),
@@ -122,11 +129,12 @@ async def download_comments(
                 "actual_tokens": actual_tokens,
                 "context_usage": f"~{round(actual_tokens / 128000 * 100, 1)}% of 128K context" if actual_tokens <= 128000 else "Exceeds 128K context",
                 "warnings": warnings if warnings else ["✅ Reasonable size for LLM ingestion"],
-                "efficiency_boost": f"87% size reduction vs full format" if slim else "Full metadata included"
+                "efficiency_boost": f"87% size reduction vs full format" if slim else "Full metadata included",
+                "api_limitation_note": "YouTube API excludes deleted/hidden comments" if response.total_comments < total_video_comments else "All video comments accessible via API"
             },
             "api_metadata": {
-                "quota_used": 1,
-                "quota_remaining": quota_status['remaining'],
+                "quota_used": 2,  # 1 for comments + 1 for video info
+                "quota_remaining": quota_status['remaining'] - 1,  # Account for the extra call
                 "api_version": "v3",
                 "data_source": "YouTube Data API"
             }
@@ -301,6 +309,11 @@ async def search_comments(
         # Sort by likes for most relevant results first
         matching_comments.sort(key=lambda x: x['likes'], reverse=True)
         
+        # Get total comment count from video info for comparison
+        video_request = MetadataRequest(video_id=video_id)
+        video_metadata = await client.get_video_info(video_request)
+        total_video_comments = video_metadata.comment_count or 0
+        
         return {
             "video_id": video_id,
             "search_terms": search_terms,
@@ -313,6 +326,8 @@ async def search_comments(
             },
             "results": {
                 "total_searched": response.total_comments,
+                "total_video_comments": total_video_comments,
+                "api_accessibility": f"{response.total_comments}/{total_video_comments} ({round(response.total_comments/total_video_comments*100, 1)}%)" if total_video_comments > 0 else "N/A",
                 "matches_found": len(matching_comments),
                 "matches_returned": min(len(matching_comments), max_results),
                 "match_rate": round((len(matching_comments) / response.total_comments * 100), 2) if response.total_comments > 0 else 0
@@ -322,7 +337,8 @@ async def search_comments(
                 "token_reduction": f"~{round((1 - len(matching_comments) / response.total_comments) * 100, 1)}%",
                 "context_optimized": True,
                 "server_side_filtered": True,
-                "format_efficiency": f"87% size reduction vs full format" if slim else "Full metadata included"
+                "format_efficiency": f"87% size reduction vs full format" if slim else "Full metadata included",
+                "api_limitation_note": "YouTube API excludes deleted/hidden comments from total count" if response.total_comments < total_video_comments else "All video comments accessible via API"
             },
             "api_metadata": {
                 "quota_used": 1,
