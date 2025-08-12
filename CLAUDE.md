@@ -56,12 +56,13 @@ uv add <package_name>
 
 ### Available MCP Tools - Streamlined & LLM-Optimized
 
-**✅ 5 CORE TOOLS (100% Reliable via YouTube Data API):**
-1. **`download_comments`** - Smart comment download with 87% size reduction (slim mode default)
-2. **`search_comments`** - Server-side filtered search with 99%+ token reduction + slim format
-3. **`get_top_comments`** - Server-side popularity sorting + 87% size reduction (slim mode default)
-4. **`get_comment_stats`** - Statistical analysis with slim sample comments (87% smaller)
-5. **`get_quota_status`** - Monitor API usage and remaining capacity
+**✅ 6 CORE TOOLS (100% Reliable via YouTube Data API):**
+1. **`get_video_info`** - Lightweight video metadata with total comment count (RECOMMENDED FIRST STEP)
+2. **`download_comments`** - Smart comment download with 87% size reduction (slim mode default)
+3. **`search_comments`** - Server-side filtered search with 99%+ token reduction + slim format
+4. **`get_top_comments`** - Server-side popularity sorting + 87% size reduction (slim mode default)
+5. **`get_comment_stats`** - Statistical analysis with slim sample comments (87% smaller)
+6. **`get_quota_status`** - Monitor API usage and remaining capacity
 
 **🚀 Key Features:**
 - **Slim Mode (Default)** - 87% size reduction with only essential comment fields
@@ -71,6 +72,38 @@ uv add <package_name>
 - **Multiple search terms** with OR logic and case sensitivity options
 - **Token usage analysis** with context percentage estimates
 - **Format flexibility** - slim=True (default) or slim=False for full metadata
+
+### Enhanced Workflow with Video Info
+
+**🚀 RECOMMENDED WORKFLOW:**
+```python
+# Step 1: Get video metadata and total comment count
+info = await get_video_info("dQw4w9WgXcQ")
+print(f"'{info['title']}' by {info['channel']}")
+print(f"Total comments: {info['statistics']['comment_count']:,}")
+
+# Step 2: Use recommendations for optimal strategy
+if info['statistics']['comment_count'] <= 1000:
+    # Small video - download all comments
+    comments = await download_comments("dQw4w9WgXcQ", limit=info['statistics']['comment_count'])
+elif info['statistics']['comment_count'] <= 5000:
+    # Medium video - download sample or search
+    comments = await download_comments("dQw4w9WgXcQ", limit=2000)
+else:
+    # Large video - use targeted tools
+    top_comments = await get_top_comments("dQw4w9WgXcQ", top_count=50)
+    search_results = await search_comments("dQw4w9WgXcQ", ["amazing", "love"], max_results=25)
+
+# Step 3: Optional - Get detailed stats
+stats = await get_comment_stats("dQw4w9WgXcQ", limit=1000)
+```
+
+**✅ Benefits:**
+- Know exact comment count before downloading
+- Get informed recommendations for strategy  
+- Avoid accidentally overwhelming LLM context
+- Only 1 API unit cost for metadata
+- Fast response time (<2 seconds)
 
 ### Usage Examples
 
@@ -90,7 +123,12 @@ uv add <package_name>
 
 **📊 Streamlined Tool Usage with Slim Mode:**
 ```python
-# Smart download with 87% size reduction (slim mode default)
+# STEP 1: Get video info first (RECOMMENDED WORKFLOW)
+video_info = await get_video_info(video_id="dQw4w9WgXcQ")
+print(f"Video has {video_info['statistics']['comment_count']:,} comments")
+# Provides recommendations for optimal download strategy
+
+# STEP 2: Smart download with 87% size reduction (slim mode default)
 result = await download_comments(
     video_id="dQw4w9WgXcQ",
     limit=100,  # Warns if >1000
@@ -135,6 +173,10 @@ stats = await get_comment_stats(
 
 # Monitor API quota usage
 quota = await get_quota_status()
+
+# Get video metadata and comment count (RECOMMENDED FIRST STEP)
+video_info = await get_video_info(video_id="dQw4w9WgXcQ")
+# Returns: title, channel, view/like/comment counts, duration, recommendations
 ```
 
 ### Input Validation with Pydantic

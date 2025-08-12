@@ -14,7 +14,7 @@ from google.oauth2 import service_account
 import json
 
 from fastmcp.exceptions import ToolError
-from src.models.youtube import CommentRequest, YouTubeComment, CommentsResponse
+from src.models.youtube import CommentRequest, YouTubeComment, CommentsResponse, MetadataRequest, VideoMetadata
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -318,6 +318,65 @@ class YouTubeAPIClient:
             'reset_time': self.quota_manager.last_reset + 86400  # Next reset time
         }
     
+    async def get_video_info(self, request: MetadataRequest) -> VideoMetadata:
+        """Get video metadata including comment count and other statistics."""
+        
+        # Check quota before making request 
+        self.quota_manager.check_quota(1)  # videos.list costs 1 unit
+        
+        service = self._build_service()
+        
+        try:
+            logger.debug(f"Getting video info for: {request.video_id}")
+            
+            # Use videos.list endpoint with statistics, snippet, and contentDetails
+            api_request = service.videos().list(
+                part='statistics,snippet,contentDetails',
+                id=request.video_id
+            )
+            
+            response = api_request.execute()
+            logger.debug(f"Video info response received: {type(response)}")
+            
+            # Validate response
+            if response is None:
+                raise ToolError("YouTube API returned empty response")
+            if 'items' not in response:
+                raise ToolError("YouTube API response missing 'items' field")
+            if not response['items']:
+                raise ToolError("Video not found or is private/unavailable")
+            
+            # Record quota usage
+            self.quota_manager.record_usage(1)
+            
+            # Parse video data
+            video_data = response['items'][0]
+            snippet = video_data.get('snippet', {})
+            statistics = video_data.get('statistics', {})
+            content_details = video_data.get('contentDetails', {})
+            
+            # Create VideoMetadata object
+            metadata = VideoMetadata(
+                video_id=request.video_id,
+                title=snippet.get('title'),
+                channel_title=snippet.get('channelTitle'),
+                view_count=int(statistics.get('viewCount', 0)) if statistics.get('viewCount') else None,
+                like_count=int(statistics.get('likeCount', 0)) if statistics.get('likeCount') else None,
+                comment_count=int(statistics.get('commentCount', 0)) if statistics.get('commentCount') else None,
+                published_at=snippet.get('publishedAt'),
+                duration=content_details.get('duration'),
+                description=snippet.get('description', '')[:500] + ('...' if len(snippet.get('description', '')) > 500 else '')  # Truncate long descriptions
+            )
+            
+            return metadata
+            
+        except HttpError as e:
+            self._handle_api_error(e)
+            # _handle_api_error always raises ToolError, so this line should never be reached
+            raise ToolError(f"API error handling failed: {str(e)}")
+        except Exception as e:
+            raise ToolError(f"Unexpected error getting video info: {str(e)}")
+
     def _try_real_quota_check(self, project_id: str = None, service_account_path: str = None) -> Optional[Dict[str, Any]]:
         """
         Attempt to check real quota usage via Google Service Usage API.

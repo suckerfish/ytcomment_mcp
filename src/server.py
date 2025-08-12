@@ -14,7 +14,7 @@ load_dotenv()
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.tools.youtube_api import YouTubeAPIClient
-from src.models.youtube import CommentRequest, QuotaStatus, SlimYouTubeComment
+from src.models.youtube import CommentRequest, QuotaStatus, SlimYouTubeComment, MetadataRequest
 
 # Initialize MCP server with stateless HTTP for streamable transport
 mcp = FastMCP("YouTube Comment Downloader", stateless_http=True)
@@ -468,6 +468,96 @@ async def get_top_comments(
         if isinstance(e, ToolError):
             raise
         raise ToolError(f"Failed to get top comments: {str(e)}")
+
+@mcp.tool()
+async def get_video_info(video_id: str) -> dict:
+    """
+    Get YouTube video metadata including total comment count.
+    
+    Lightweight tool that fetches video metadata to help users make informed
+    decisions about comment download limits. Provides essential video statistics
+    including the total comment count, which is crucial for determining
+    appropriate download limits before using download_comments.
+    
+    Perfect for: "How many comments does this video have?", "Should I download
+    all comments?", "What's the video info?"
+    
+    Args:
+        video_id: YouTube video ID (e.g., 'dQw4w9WgXcQ')
+    
+    Returns:
+        Dictionary with video metadata including comment count, title, stats
+    """
+    try:
+        client = get_api_client()
+        request = MetadataRequest(video_id=video_id)
+        
+        metadata = await client.get_video_info(request)
+        quota_status = client.get_quota_status()
+        
+        # Format duration in human-readable format
+        duration_formatted = metadata.duration
+        if metadata.duration and metadata.duration.startswith('PT'):
+            # Convert ISO 8601 duration to human readable
+            import re
+            duration_match = re.match(r'PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?', metadata.duration)
+            if duration_match:
+                hours, minutes, seconds = duration_match.groups()
+                parts = []
+                if hours:
+                    parts.append(f"{hours}h")
+                if minutes:
+                    parts.append(f"{minutes}m")
+                if seconds:
+                    parts.append(f"{seconds}s")
+                duration_formatted = " ".join(parts) if parts else "0s"
+        
+        # Create recommendations based on comment count
+        recommendations = []
+        if metadata.comment_count:
+            if metadata.comment_count <= 1000:
+                recommendations.append(f"💡 Small video: Can download all {metadata.comment_count:,} comments safely")
+                recommendations.append(f"💡 Suggested: download_comments('{video_id}', limit={metadata.comment_count})")
+            elif metadata.comment_count <= 5000:
+                recommendations.append(f"💡 Medium video: {metadata.comment_count:,} comments available")
+                recommendations.append(f"💡 Suggested: download_comments('{video_id}', limit=2000) or use search_comments")
+            else:
+                recommendations.append(f"💡 Large video: {metadata.comment_count:,} comments available")
+                recommendations.append(f"💡 Suggested: Use search_comments or get_top_comments for efficiency")
+                recommendations.append(f"💡 Or download_comments('{video_id}', limit=1000, force_large_ingestion=True)")
+        
+        return {
+            "video_id": metadata.video_id,
+            "title": metadata.title,
+            "channel": metadata.channel_title,
+            "statistics": {
+                "view_count": metadata.view_count,
+                "like_count": metadata.like_count,
+                "comment_count": metadata.comment_count
+            },
+            "details": {
+                "published_at": metadata.published_at,
+                "duration": duration_formatted,
+                "description_preview": metadata.description[:200] + "..." if metadata.description and len(metadata.description) > 200 else metadata.description
+            },
+            "comment_analysis": {
+                "total_comments": metadata.comment_count,
+                "estimated_download_time": f"~{(metadata.comment_count or 0) // 1000 * 30}-{(metadata.comment_count or 0) // 1000 * 60} seconds" if metadata.comment_count and metadata.comment_count > 1000 else "< 30 seconds",
+                "api_requests_needed": (metadata.comment_count or 0) // 100 + 1 if metadata.comment_count else 1,
+                "quota_cost": (metadata.comment_count or 0) // 100 + 1 if metadata.comment_count else 1
+            },
+            "recommendations": recommendations,
+            "api_metadata": {
+                "quota_used": 1,
+                "quota_remaining": quota_status['remaining'],
+                "data_source": "YouTube Data API v3"
+            }
+        }
+        
+    except Exception as e:
+        if isinstance(e, ToolError):
+            raise
+        raise ToolError(f"Failed to get video info: {str(e)}")
 
 @mcp.tool()
 async def get_quota_status() -> dict:
