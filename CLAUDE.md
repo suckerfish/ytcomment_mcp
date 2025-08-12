@@ -67,7 +67,7 @@ uv add <package_name>
 **🚀 Key Features:**
 - **Slim Mode (Default)** - 87% size reduction with only essential comment fields
 - **Server-side filtering** reduces token usage by 99%+ for LLM efficiency
-- **Smart warning system** prevents accidental context overflow (>1000 comments)
+- **Smart warning system** prevents accidental context overflow (>2000 comments)
 - **Advanced popularity sorting** finds viral comments with 1M+ likes
 - **Multiple search terms** with OR logic and case sensitivity options
 - **Token usage analysis** with context percentage estimates
@@ -83,19 +83,19 @@ print(f"'{info['title']}' by {info['channel']}")
 print(f"Total comments: {info['statistics']['comment_count']:,}")
 
 # Step 2: Use recommendations for optimal strategy
-if info['statistics']['comment_count'] <= 1000:
+if info['statistics']['comment_count'] <= 2000:
     # Small video - download all comments
     comments = await download_comments("dQw4w9WgXcQ", limit=info['statistics']['comment_count'])
 elif info['statistics']['comment_count'] <= 5000:
     # Medium video - download sample or search
-    comments = await download_comments("dQw4w9WgXcQ", limit=2000)
+    comments = await download_comments("dQw4w9WgXcQ", limit=3000)
 else:
     # Large video - use targeted tools
     top_comments = await get_top_comments("dQw4w9WgXcQ", top_count=50)
     search_results = await search_comments("dQw4w9WgXcQ", ["amazing", "love"], max_results=25)
 
 # Step 3: Optional - Get detailed stats
-stats = await get_comment_stats("dQw4w9WgXcQ", limit=1000)
+stats = await get_comment_stats("dQw4w9WgXcQ", limit=2000)
 ```
 
 **✅ Benefits:**
@@ -131,7 +131,7 @@ print(f"Video has {video_info['statistics']['comment_count']:,} comments")
 # STEP 2: Smart download with 87% size reduction (slim mode default)
 result = await download_comments(
     video_id="dQw4w9WgXcQ",
-    limit=100,  # Warns if >1000
+    limit=100,  # Warns if >2000
     sort=1,     # 1=recent, 0=popular
     slim=True,  # Default - only essential fields (author, text, likes, time, is_hearted)
     force_large_ingestion=False  # Override warnings
@@ -149,7 +149,7 @@ matches = await search_comments(
     video_id="dQw4w9WgXcQ",
     search_terms=["rick", "never", "gonna"],  # OR logic
     max_results=50,      # Limits returned results
-    search_limit=5000,   # Total comments to search
+    search_limit=3000,   # Total comments to search (default: 3000)
     case_sensitive=False,
     slim=True           # Default - essential fields only
 )
@@ -160,14 +160,14 @@ top_comments = await get_top_comments(
     top_count=25,        # Number to return
     min_likes=10000,     # Filter threshold
     include_replies=True, # Include reply comments
-    sample_size=10000,    # Comments to analyze
+    sample_size=3000,    # Comments to analyze (default: 3000)
     slim=True            # Default - 87% size reduction
 )
 
 # Statistical analysis with slim sample comments
 stats = await get_comment_stats(
     video_id="dQw4w9WgXcQ", 
-    limit=1000,
+    limit=2000,  # Default limit updated to 2000
     slim=True  # Default - sample comments use essential fields only
 )
 
@@ -278,7 +278,7 @@ async def authenticated_tool(param: str, ctx: Context) -> dict:
 - **Memory limit**: 50MB (~28,000 comments in full mode, ~185,000 in slim mode)
 - **Timeout**: 120 seconds per request
 - **API Quota**: 10,000 units/day (1 unit per 100 comments)
-- **Smart warnings**: Triggers at >1000 comments to prevent LLM context overflow
+- **Smart warnings**: Triggers at >2000 comments to prevent LLM context overflow
 - **Token efficiency**: Server-side filtering reduces token usage by 99%+
 - **Slim mode efficiency**: Additional 87% reduction in data size (6 vs 25 tokens per comment)
 - **Context protection**: Automatic token analysis with 128K context awareness
@@ -332,7 +332,7 @@ For detailed implementation guidance, see:
 - **Slim Mode (Default)**: 87% size reduction with essential fields only (author, text, likes, time, is_hearted)
 - **Data Accuracy**: 100% accurate like counts and engagement metrics
 - **LLM Optimization**: Server-side filtering reduces token usage by 99%+, slim mode adds another 87% reduction
-- **Smart Warnings**: Prevents accidental LLM context overflow (>1000 comments)
+- **Smart Warnings**: Prevents accidental LLM context overflow (>2000 comments)
 - **Advanced Search**: Multiple terms, OR logic, case sensitivity options
 - **Viral Detection**: Finds actual viral comments (1M+ likes)
 - **Performance**: ~30-60 seconds per 1,000 comments with reliable results

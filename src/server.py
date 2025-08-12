@@ -32,7 +32,7 @@ def get_api_client() -> YouTubeAPIClient:
 @mcp.tool()
 async def download_comments(
     video_id: str,
-    limit: int = 1000,
+    limit: int = 2000,
     sort: int = 1,
     force_large_ingestion: bool = False,
     slim: bool = True
@@ -50,7 +50,7 @@ async def download_comments(
     
     Args:
         video_id: YouTube video ID (e.g., 'dQw4w9WgXcQ')
-        limit: Maximum comments to download (1-10000, default: 1000)
+        limit: Maximum comments to download (1-10000, default: 2000)
         sort: Sort order - 0 for popular/relevance, 1 for recent/time (default: 1)
         force_large_ingestion: Bypass warnings for large datasets (default: False)
         slim: Return only essential fields for 87% size reduction (default: True)
@@ -68,7 +68,7 @@ async def download_comments(
         
         # Warning system for large ingestion
         warnings = []
-        if limit > 1000 and not force_large_ingestion:
+        if limit > 2000 and not force_large_ingestion:
             warnings.append(f"⚠️ Large dataset requested: {limit} comments (~{estimated_tokens:,} tokens)")
             warnings.append(f"⚠️ This may exceed LLM context limits")
             warnings.append(f"💡 Consider using search_comments or get_top_comments instead")
@@ -88,7 +88,7 @@ async def download_comments(
                 "recommendation": f"Use search_comments with max_results=50-200 or get_top_comments with top_count=25-100"
             }
         
-        if limit > 2000:
+        if limit > 4000:
             warnings.append(f"⚠️ Very large dataset: {limit} comments (~{estimated_tokens:,} tokens)")
             warnings.append(f"📊 May consume significant LLM context")
         
@@ -148,7 +148,7 @@ async def download_comments(
 @mcp.tool()
 async def get_comment_stats(
     video_id: str,
-    limit: int = 1000,
+    limit: int = 2000,
     sort: int = 1,
     slim: bool = True
 ) -> dict:
@@ -164,7 +164,7 @@ async def get_comment_stats(
     
     Args:
         video_id: YouTube video ID (e.g., 'dQw4w9WgXcQ')  
-        limit: Maximum comments to analyze (1-10000, default: 1000)
+        limit: Maximum comments to analyze (1-10000, default: 2000)
         sort: Sort order - 0 for popular, 1 for recent (default: 1)
         slim: Return only essential fields in sample comments (default: True)
     
@@ -266,7 +266,7 @@ async def search_comments(
         
         # Auto-size search limit for better coverage
         if search_limit is None:
-            search_limit = 5000  # Good balance of coverage vs speed
+            search_limit = 3000  # Search entire available pool for best results
         elif not 100 <= search_limit <= 10000:
             raise ToolError("search_limit must be between 100 and 10000")
         
@@ -393,7 +393,7 @@ async def get_top_comments(
         
         # Auto-size for optimal coverage vs performance
         if sample_size is None:
-            sample_size = 10000  # Maximum for best coverage
+            sample_size = 3000  # Search entire available pool for best results
         elif not 100 <= sample_size <= 10000:
             raise ToolError("sample_size must be between 100 and 10000")
         
