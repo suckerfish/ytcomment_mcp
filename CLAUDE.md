@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a YouTube Comment Downloader MCP server that allows AI systems to download and analyze YouTube video comments using the official YouTube Data API. Built with FastMCP, it provides intelligent comment analysis, server-side search filtering, and engagement insights optimized for LLM ingestion.
+This is a YouTube Comment Downloader MCP server that allows AI systems to download and analyze YouTube video comments using the official YouTube Data API. Built with FastMCP, it provides intelligent comment analysis, server-side search filtering, engagement insights, and **accurate token counting** optimized for LLM ingestion.
 
-The server uses the YouTube Data API v3 for 100% accurate comment data with server-side filtering to minimize token usage and optimize LLM context efficiency.
+The server uses the YouTube Data API v3 for 100% accurate comment data with server-side filtering to minimize token usage and optimize LLM context efficiency. All tools automatically provide precise token counts using Claude's tokenization patterns.
 
 ## Quick Commands
 
@@ -16,16 +16,28 @@ Test the MCP server locally:
 
 ```bash
 # Test server functionality directly
-uv run python test_server.py
+uv run python tests/test_server.py
+
+# Test new channel workflow (find → get videos → search comments)
+uv run python tests/test_channel_workflow.py
+
+# Test new channel and video tools individually
+uv run python tests/test_new_tools.py
 
 # Test token estimation for comments
-uv run python test_tokens.py
+uv run python tests/test_tokens.py
 
 # Test reply structure analysis
-uv run python test_replies.py
+uv run python tests/test_replies.py
 
 # Test top comments by likes
-uv run python test_top_likes.py
+uv run python tests/test_top_likes.py
+
+# Test token counting functionality
+uv run python tests/test_token_counting.py
+
+# Test token counting integration with YouTube API
+uv run python tests/test_integration_simple.py
 
 # Run the MCP server for client connections (stdio transport)
 uv run python src/server.py
@@ -39,6 +51,8 @@ uv run python src/server.py --transport streamable-http --host 0.0.0.0 --port 80
 # Test with MCPTools
 mcp tools uv run python src/server.py
 ```
+
+**📁 Tests Directory**: All testing and validation scripts are organized in the `tests/` directory for better project structure.
 
 ### Package Management
 
@@ -56,7 +70,9 @@ uv add <package_name>
 
 ### Available MCP Tools - Streamlined & LLM-Optimized
 
-**✅ 6 CORE TOOLS (100% Reliable via YouTube Data API):**
+**✅ 8 CORE TOOLS (100% Reliable via YouTube Data API):**
+
+**📊 Comment Analysis Tools:**
 1. **`get_video_info`** - Lightweight video metadata with total comment count (RECOMMENDED FIRST STEP)
 2. **`download_comments`** - Smart comment download with 87% size reduction (slim mode default)
 3. **`search_comments`** - Server-side filtered search with 99%+ token reduction + slim format
@@ -64,18 +80,51 @@ uv add <package_name>
 5. **`get_comment_stats`** - Statistical analysis with slim sample comments (87% smaller)
 6. **`get_quota_status`** - Monitor API usage and remaining capacity
 
+**🔍 Channel Discovery Tools:**
+7. **`find_channel`** - Search YouTube channels by name/partial name (NEW!)
+8. **`get_channel_videos`** - List channel videos with server-side title filtering (NEW!)
+
 **🚀 Key Features:**
 - **Slim Mode (Default)** - 87% size reduction with only essential comment fields
 - **Server-side filtering** reduces token usage by 99%+ for LLM efficiency
 - **Smart warning system** prevents accidental context overflow (>2000 comments)
 - **Advanced popularity sorting** finds viral comments with 1M+ likes
 - **Multiple search terms** with OR logic and case sensitivity options
-- **Token usage analysis** with context percentage estimates
+- **Accurate Token Counting** - Claude tokenization patterns as baseline with detailed breakdown
+- **Context Analysis** - Multi-model LLM context usage estimates (Claude, GPT-4, Gemini)
 - **Format flexibility** - slim=True (default) or slim=False for full metadata
+- **Channel Discovery Workflow** - Complete pipeline from channel name to comment analysis
+- **Title filtering** - Server-side video filtering by title keywords for targeted analysis
 
-### Enhanced Workflow with Video Info
+### Enhanced Workflows
 
-**🚀 RECOMMENDED WORKFLOW:**
+**🔍 CHANNEL DISCOVERY WORKFLOW (NEW!):**
+```python
+# Step 1: Find channel by name or partial name
+channels = await find_channel("mkbhd", max_results=5)
+channel_id = channels['channels'][0]['channel_id']
+print(f"Found: {channels['channels'][0]['title']} ({channels['channels'][0]['subscriber_count']:,} subscribers)")
+
+# Step 2: Get recent videos with title filtering
+videos = await get_channel_videos(
+    channel_id=channel_id,
+    title_filter="iphone",  # Find videos about iPhone
+    limit=5,
+    order="date"  # Most recent first
+)
+print(f"Found {videos['filter_efficiency']['after_title_filter']} videos matching 'iphone'")
+
+# Step 3: Search comments on each video
+for video in videos['videos']:
+    matches = await search_comments(
+        video_id=video['video_id'],
+        search_terms=["amazing", "review", "thoughts"],
+        max_results=10
+    )
+    print(f"Video: {video['title']} - Found {matches['results']['matches_found']} matching comments")
+```
+
+**📊 VIDEO-FOCUSED WORKFLOW:**
 ```python
 # Step 1: Get video metadata and total comment count
 info = await get_video_info("dQw4w9WgXcQ")
@@ -105,6 +154,44 @@ stats = await get_comment_stats("dQw4w9WgXcQ", limit=2000)
 - Only 1 API unit cost for metadata
 - Fast response time (<2 seconds)
 
+### Token Counting Feature
+
+**🧮 Automatic Token Analysis (NEW!):**
+
+All comment retrieval tools now provide **accurate token counting** using Claude's tokenization patterns as baseline:
+
+```json
+"token_analysis": {
+  "actual_tokens": 64,
+  "average_tokens_per_comment": 21.33,
+  "token_breakdown": {
+    "content_tokens": 19,      // Actual comment text
+    "structure_tokens": 15,    // JSON formatting overhead
+    "metadata_tokens": 30      // Author, likes, time, etc.
+  },
+  "context_analysis": {
+    "claude_3_5": {"usage_percentage": 0.03, "fits_in_context": true},
+    "gpt4": {"usage_percentage": 0.05, "fits_in_context": true},
+    "gemini_pro": {"usage_percentage": 0.0, "fits_in_context": true}
+  },
+  "tokenization_method": "Claude tokenization patterns"
+}
+```
+
+**📊 Key Benefits:**
+- **Automatic provision** - No need to ask, always included in responses
+- **Claude-accurate** - Uses Claude's tokenization patterns (0.25 tokens/char baseline)
+- **Multi-model support** - Context analysis for Claude, GPT-4, Gemini
+- **Content-aware** - Adjusts for emojis, URLs, special characters
+- **Breakdown analysis** - See exactly where tokens are used
+- **LLM optimization** - Make informed decisions about comment limits
+
+**🎯 Available in All Tools:**
+- `download_comments` - Real token counts with detailed analysis
+- `search_comments` - Token analysis for filtered results  
+- `get_top_comments` - Token counting for popular comments
+- `get_comment_stats` - Sample comment token analysis
+
 ### Usage Examples
 
 **🔑 MCP Client Configuration:**
@@ -123,6 +210,22 @@ stats = await get_comment_stats("dQw4w9WgXcQ", limit=2000)
 
 **📊 Streamlined Tool Usage with Slim Mode:**
 ```python
+# CHANNEL DISCOVERY TOOLS (NEW!)
+# Find channels by name or partial name
+channels = await find_channel(
+    channel_name="veritasium",
+    max_results=5  # Get top 5 matches
+)
+
+# Get videos from specific channel with filtering
+videos = await get_channel_videos(
+    channel_id="UCHnyfMqiRRG1u-2MsSQLbXA",  # From find_channel results
+    title_filter="physics",     # Filter videos about physics
+    limit=10,                   # Max videos to return
+    order="date"                # Most recent first
+)
+
+# COMMENT ANALYSIS TOOLS
 # STEP 1: Get video info first (RECOMMENDED WORKFLOW)
 video_info = await get_video_info(video_id="dQw4w9WgXcQ")
 print(f"Video has {video_info['statistics']['comment_count']:,} comments")
@@ -288,21 +391,28 @@ async def authenticated_tool(param: str, ctx: Context) -> dict:
 
 ```
 src/
-├── server.py                   # Streamlined MCP server with 5 LLM-optimized tools
+├── server.py                   # Streamlined MCP server with 8 LLM-optimized tools + token counting
 ├── tools/
 │   ├── youtube_comments.py     # Stats calculation utilities  
-│   └── youtube_api.py          # YouTube Data API client with server-side filtering
+│   ├── youtube_api.py          # YouTube Data API client with channel search & video listing
+│   └── token_counter.py        # Claude tokenization pattern-based token counting (NEW!)
 ├── models/
-│   └── youtube.py              # Pydantic models for validation
+│   └── youtube.py              # Pydantic models for validation (includes channel/video models)
 └── __init__.py
 
-# Test files (project root)
+# Test files - organized in tests/ directory
+tests/
 ├── test_server.py              # Basic functionality test
+├── test_channel_workflow.py    # Complete channel → videos → comments workflow test
+├── test_new_tools.py           # Channel and video tools validation
 ├── test_tokens.py              # Token estimation analysis  
+├── test_token_counting.py      # Token counting functionality test (NEW!)
+├── test_integration_simple.py  # Token counting integration with YouTube API (NEW!)
 ├── test_replies.py             # Reply structure analysis
 ├── test_api.py                 # YouTube Data API functionality test
-├── src/server_backup.py        # Backup of pre-consolidation server
-└── data_analysis_report.md     # Detailed findings report
+├── test_top_likes.py           # Top comments functionality test
+├── test_video_info.py          # Video metadata functionality test
+└── ...                         # Additional validation scripts
 ```
 
 ## Essential Dependencies
@@ -338,8 +448,10 @@ For detailed implementation guidance, see:
 - **Performance**: ~30-60 seconds per 1,000 comments with reliable results
 - **Quota Management**: 10,000 units/day, 1 unit per 100 comments
 - **Error Handling**: Comprehensive API error handling with specific user guidance
-- **Clean Architecture**: 5 streamlined tools, zero redundancy, intuitive naming
+- **Clean Architecture**: 8 streamlined tools, zero redundancy, intuitive naming
 - **Format Flexibility**: Toggle between slim (default) and full metadata modes
+- **Channel Discovery**: Complete workflow from channel name to targeted comment analysis
+- **Server-side Title Filtering**: Efficient video filtering by title keywords before comment analysis
 
 ### Transport Configuration
 - **Local Development**: Uses `stdio` transport by default
@@ -390,7 +502,7 @@ cp .env.example .env
 YOUTUBE_API_KEY=your-api-key-here
 
 # Test locally
-uv run python test_api.py
+uv run python tests/test_api.py
 ```
 
 ## Configuration Patterns

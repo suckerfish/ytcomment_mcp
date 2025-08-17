@@ -14,6 +14,7 @@ load_dotenv()
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.tools.youtube_api import YouTubeAPIClient
+from src.tools.token_counter import ClaudeTokenCounter
 from src.models.youtube import (
     CommentRequest, QuotaStatus, SlimYouTubeComment, MetadataRequest,
     ChannelSearchRequest, VideoListRequest
@@ -22,8 +23,9 @@ from src.models.youtube import (
 # Initialize MCP server with stateless HTTP for streamable transport
 mcp = FastMCP("YouTube Comment Downloader", stateless_http=True)
 
-# Initialize API client
+# Initialize API client and token counter
 api_client = None  # Will be initialized when needed with API key
+token_counter = ClaudeTokenCounter()  # Token counting using Claude patterns
 
 def get_api_client() -> YouTubeAPIClient:
     """Get or create API client with proper error handling."""
@@ -110,13 +112,15 @@ async def download_comments(
         video_metadata = await client.get_video_info(video_request)
         total_video_comments = video_metadata.comment_count or 0
         
-        # Convert comments to appropriate format
+        # Convert comments to appropriate format and calculate actual tokens
         if slim:
-            comments_data = [SlimYouTubeComment.from_full_comment(comment).dict() for comment in response.comments]
-            actual_tokens = len(response.comments) * 6  # ~6 tokens per slim comment
+            comments_data = [SlimYouTubeComment.from_full_comment(comment).model_dump() for comment in response.comments]
         else:
-            comments_data = [comment.dict() for comment in response.comments]
-            actual_tokens = len(response.comments) * 25  # ~25 tokens per full comment
+            comments_data = [comment.model_dump() for comment in response.comments]
+        
+        # Calculate accurate token count using Claude tokenization patterns
+        token_analysis = token_counter.count_comments_tokens(comments_data, slim_mode=slim)
+        actual_tokens = token_analysis['total_tokens']
         
         return {
             "video_id": response.video_id,
@@ -125,15 +129,19 @@ async def download_comments(
             "api_accessibility": f"{response.total_comments}/{total_video_comments} ({round(response.total_comments/total_video_comments*100, 1)}%)" if total_video_comments > 0 else "N/A",
             "comments": comments_data,
             "format": "slim" if slim else "full",
-            "request_params": response.request_params.dict(),
+            "request_params": response.request_params.model_dump(),
             "memory_usage_mb": round(response.memory_usage_mb, 2),
             "token_analysis": {
                 "estimated_tokens": estimated_tokens,
                 "actual_tokens": actual_tokens,
+                "token_breakdown": token_analysis['token_breakdown'],
+                "average_tokens_per_comment": token_analysis['average_tokens_per_comment'],
                 "context_usage": f"~{round(actual_tokens / 128000 * 100, 1)}% of 128K context" if actual_tokens <= 128000 else "Exceeds 128K context",
+                "context_analysis": token_counter.get_context_analysis(actual_tokens),
                 "warnings": warnings if warnings else ["✅ Reasonable size for LLM ingestion"],
                 "efficiency_boost": f"87% size reduction vs full format" if slim else "Full metadata included",
-                "api_limitation_note": "YouTube API excludes deleted/hidden comments" if response.total_comments < total_video_comments else "All video comments accessible via API"
+                "api_limitation_note": "YouTube API excludes deleted/hidden comments" if response.total_comments < total_video_comments else "All video comments accessible via API",
+                "tokenization_method": "Claude tokenization patterns"
             },
             "api_metadata": {
                 "quota_used": 2,  # 1 for comments + 1 for video info
@@ -193,7 +201,7 @@ async def get_comment_stats(
         if slim:
             sample_comments = [
                 {
-                    **SlimYouTubeComment.from_full_comment(comment).dict(),
+                    **SlimYouTubeComment.from_full_comment(comment).model_dump(),
                     "text": comment.text[:100] + "..." if len(comment.text) > 100 else comment.text
                 }
                 for comment in response.comments[:5]
@@ -209,10 +217,20 @@ async def get_comment_stats(
                 for comment in response.comments[:5]
             ]
         
+        # Calculate token count for sample comments
+        sample_token_analysis = token_counter.count_comments_tokens(sample_comments, slim_mode=slim)
+        
         return {
             "video_id": response.video_id,
-            "stats": stats.dict(),
+            "stats": stats.model_dump(),
             "sample_comments": sample_comments,
+            "sample_token_analysis": {
+                "total_tokens": sample_token_analysis['total_tokens'],
+                "average_tokens_per_comment": sample_token_analysis['average_tokens_per_comment'],
+                "token_breakdown": sample_token_analysis['token_breakdown'],
+                "context_analysis": token_counter.get_context_analysis(sample_token_analysis['total_tokens']),
+                "tokenization_method": "Claude tokenization patterns"
+            },
             "format": "slim" if slim else "full",
             "api_metadata": {
                 "quota_used": 1,
@@ -293,7 +311,7 @@ async def search_comments(
             # Check if any search term matches (OR logic)
             if any(term in comment_text for term in search_terms_processed):
                 if slim:
-                    matching_comments.append(SlimYouTubeComment.from_full_comment(comment).dict())
+                    matching_comments.append(SlimYouTubeComment.from_full_comment(comment).model_dump())
                 else:
                     matching_comments.append({
                         "author": comment.author,
@@ -311,6 +329,9 @@ async def search_comments(
         
         # Sort by likes for most relevant results first
         matching_comments.sort(key=lambda x: x['likes'], reverse=True)
+        
+        # Calculate token count for matching comments
+        token_analysis = token_counter.count_comments_tokens(matching_comments, slim_mode=slim)
         
         # Get total comment count from video info for comparison
         video_request = MetadataRequest(video_id=video_id)
@@ -336,6 +357,13 @@ async def search_comments(
                 "match_rate": round((len(matching_comments) / response.total_comments * 100), 2) if response.total_comments > 0 else 0
             },
             "matching_comments": matching_comments[:max_results],
+            "token_analysis": {
+                "total_tokens": token_analysis['total_tokens'],
+                "average_tokens_per_comment": token_analysis['average_tokens_per_comment'],
+                "token_breakdown": token_analysis['token_breakdown'],
+                "context_analysis": token_counter.get_context_analysis(token_analysis['total_tokens']),
+                "tokenization_method": "Claude tokenization patterns"
+            },
             "efficiency_info": {
                 "token_reduction": f"~{round((1 - len(matching_comments) / response.total_comments) * 100, 1)}%",
                 "context_optimized": True,
@@ -435,7 +463,7 @@ async def get_top_comments(
             top_comments_list = [
                 {
                     "rank": i + 1,
-                    **SlimYouTubeComment.from_full_comment(comment).dict()
+                    **SlimYouTubeComment.from_full_comment(comment).model_dump()
                 }
                 for i, comment in enumerate(top_comments)
             ]
@@ -454,6 +482,9 @@ async def get_top_comments(
                 for i, comment in enumerate(top_comments)
             ]
         
+        # Calculate token count for top comments
+        token_analysis = token_counter.count_comments_tokens(top_comments_list, slim_mode=slim)
+        
         return {
             "video_id": video_id,
             "filtering": {
@@ -470,6 +501,13 @@ async def get_top_comments(
                 "lowest_likes": top_comments[-1].likes_count if top_comments else 0
             },
             "top_comments": top_comments_list,
+            "token_analysis": {
+                "total_tokens": token_analysis['total_tokens'],
+                "average_tokens_per_comment": token_analysis['average_tokens_per_comment'],
+                "token_breakdown": token_analysis['token_breakdown'],
+                "context_analysis": token_counter.get_context_analysis(token_analysis['total_tokens']),
+                "tokenization_method": "Claude tokenization patterns"
+            },
             "efficiency_info": {
                 "token_reduction": f"~{round((1 - len(top_comments) / response.total_comments) * 100, 1)}%",
                 "context_optimized": True,
