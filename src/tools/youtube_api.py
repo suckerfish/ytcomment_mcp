@@ -14,7 +14,11 @@ from google.oauth2 import service_account
 import json
 
 from fastmcp.exceptions import ToolError
-from src.models.youtube import CommentRequest, YouTubeComment, CommentsResponse, MetadataRequest, VideoMetadata
+from src.models.youtube import (
+    CommentRequest, YouTubeComment, CommentsResponse, MetadataRequest, VideoMetadata,
+    ChannelSearchRequest, ChannelSearchResponse, ChannelInfo,
+    VideoListRequest, VideoListResponse, VideoInfo
+)
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -431,3 +435,256 @@ class YouTubeAPIClient:
         except Exception as e:
             logger.warning(f"Could not check real quota usage: {e}")
             return None
+
+    async def search_channels(self, request: ChannelSearchRequest) -> ChannelSearchResponse:
+        """Search for channels by name using YouTube Data API."""
+        
+        # Check quota before making request (search.list costs 100 units)
+        self.quota_manager.check_quota(100)
+        
+        service = self._build_service()
+        
+        try:
+            logger.debug(f"Searching for channels: {request.channel_name}")
+            
+            # Use search.list endpoint to find channels
+            search_request = service.search().list(
+                part='snippet',
+                q=request.channel_name,
+                type='channel',
+                maxResults=request.max_results,
+                order='relevance'
+            )
+            
+            response = search_request.execute()
+            logger.debug(f"Channel search response received: {type(response)}")
+            
+            # Validate response
+            if response is None:
+                raise ToolError("YouTube API returned empty response")
+            if 'items' not in response:
+                raise ToolError("YouTube API response missing 'items' field")
+            
+            # Record quota usage
+            self.quota_manager.record_usage(100)
+            
+            # Parse channel data
+            channels = []
+            for item in response['items']:
+                snippet = item.get('snippet', {})
+                channel_id = snippet.get('channelId') or item.get('id', {}).get('channelId', '')
+                
+                if not channel_id:
+                    continue  # Skip items without channel ID
+                
+                # Get additional channel statistics if available
+                try:
+                    channel_details = await self._get_channel_details(channel_id)
+                except Exception as e:
+                    logger.warning(f"Could not get details for channel {channel_id}: {e}")
+                    channel_details = {}
+                
+                channel_info = ChannelInfo(
+                    channel_id=channel_id,
+                    title=snippet.get('title', ''),
+                    description=snippet.get('description', '')[:200] + ('...' if len(snippet.get('description', '')) > 200 else ''),
+                    thumbnail_url=snippet.get('thumbnails', {}).get('default', {}).get('url'),
+                    published_at=snippet.get('publishedAt'),
+                    subscriber_count=channel_details.get('subscriber_count'),
+                    video_count=channel_details.get('video_count'),
+                    view_count=channel_details.get('view_count'),
+                    custom_url=channel_details.get('custom_url')
+                )
+                channels.append(channel_info)
+            
+            return ChannelSearchResponse(
+                search_query=request.channel_name,
+                total_results=len(channels),
+                channels=channels,
+                quota_used=100
+            )
+            
+        except HttpError as e:
+            self._handle_api_error(e)
+            raise ToolError(f"API error handling failed: {str(e)}")
+        except Exception as e:
+            raise ToolError(f"Unexpected error searching channels: {str(e)}")
+
+    async def _get_channel_details(self, channel_id: str) -> Dict[str, Any]:
+        """Get additional channel details (statistics, etc.)."""
+        
+        # Check quota before making request
+        self.quota_manager.check_quota(1)
+        
+        service = self._build_service()
+        
+        try:
+            request = service.channels().list(
+                part='statistics,snippet',
+                id=channel_id
+            )
+            
+            response = request.execute()
+            
+            if not response.get('items'):
+                return {}
+            
+            # Record quota usage
+            self.quota_manager.record_usage(1)
+            
+            item = response['items'][0]
+            statistics = item.get('statistics', {})
+            snippet = item.get('snippet', {})
+            
+            return {
+                'subscriber_count': int(statistics.get('subscriberCount', 0)) if statistics.get('subscriberCount') else None,
+                'video_count': int(statistics.get('videoCount', 0)) if statistics.get('videoCount') else None,
+                'view_count': int(statistics.get('viewCount', 0)) if statistics.get('viewCount') else None,
+                'custom_url': snippet.get('customUrl')
+            }
+            
+        except Exception as e:
+            logger.warning(f"Could not get channel details for {channel_id}: {e}")
+            return {}
+
+    async def get_channel_videos(self, request: VideoListRequest) -> VideoListResponse:
+        """Get recent videos from a channel with optional title filtering."""
+        
+        # Check quota before making request (search.list costs 100 units)
+        self.quota_manager.check_quota(100)
+        
+        service = self._build_service()
+        
+        try:
+            logger.debug(f"Getting videos for channel: {request.channel_id}")
+            
+            # Use search.list to get videos from the channel
+            search_request = service.search().list(
+                part='snippet',
+                channelId=request.channel_id,
+                type='video',
+                order=request.order,
+                maxResults=min(50, request.limit),  # API max is 50 per request
+                regionCode='US'  # Optional: can be made configurable
+            )
+            
+            response = search_request.execute()
+            logger.debug(f"Channel videos response received: {type(response)}")
+            
+            # Validate response
+            if response is None:
+                raise ToolError("YouTube API returned empty response")
+            if 'items' not in response:
+                raise ToolError("YouTube API response missing 'items' field")
+            
+            # Record quota usage
+            self.quota_manager.record_usage(100)
+            
+            # Parse video data
+            all_videos = []
+            video_ids = []
+            
+            for item in response['items']:
+                snippet = item.get('snippet', {})
+                video_id = item.get('id', {}).get('videoId', '')
+                
+                if not video_id:
+                    continue
+                
+                video_ids.append(video_id)
+                
+                # Basic video info from search
+                video_info = VideoInfo(
+                    video_id=video_id,
+                    title=snippet.get('title', ''),
+                    description=snippet.get('description', '')[:200] + ('...' if len(snippet.get('description', '')) > 200 else ''),
+                    published_at=snippet.get('publishedAt', ''),
+                    thumbnail_url=snippet.get('thumbnails', {}).get('default', {}).get('url')
+                )
+                all_videos.append(video_info)
+            
+            # Get additional video details (duration, stats) for all videos
+            if video_ids:
+                try:
+                    video_details = await self._get_video_details(video_ids)
+                    # Merge additional details into video info
+                    for video in all_videos:
+                        details = video_details.get(video.video_id, {})
+                        video.duration = details.get('duration')
+                        video.view_count = details.get('view_count')
+                        video.like_count = details.get('like_count')
+                        video.comment_count = details.get('comment_count')
+                except Exception as e:
+                    logger.warning(f"Could not get video details: {e}")
+            
+            # Apply title filter if provided
+            filtered_videos = all_videos
+            if request.title_filter:
+                filter_lower = request.title_filter.lower()
+                filtered_videos = [
+                    video for video in all_videos 
+                    if filter_lower in video.title.lower()
+                ]
+            
+            # Limit results
+            filtered_videos = filtered_videos[:request.limit]
+            
+            return VideoListResponse(
+                channel_id=request.channel_id,
+                title_filter=request.title_filter,
+                total_videos_found=len(all_videos),
+                filtered_videos_count=len(filtered_videos),
+                videos=filtered_videos,
+                quota_used=100
+            )
+            
+        except HttpError as e:
+            self._handle_api_error(e)
+            raise ToolError(f"API error handling failed: {str(e)}")
+        except Exception as e:
+            raise ToolError(f"Unexpected error getting channel videos: {str(e)}")
+
+    async def _get_video_details(self, video_ids: List[str]) -> Dict[str, Dict[str, Any]]:
+        """Get additional video details (duration, statistics, etc.)."""
+        
+        if not video_ids:
+            return {}
+        
+        # Check quota before making request
+        self.quota_manager.check_quota(1)
+        
+        service = self._build_service()
+        
+        try:
+            # videos.list can handle up to 50 video IDs at once
+            request = service.videos().list(
+                part='contentDetails,statistics',
+                id=','.join(video_ids[:50])  # Limit to 50 IDs
+            )
+            
+            response = request.execute()
+            
+            if not response.get('items'):
+                return {}
+            
+            # Record quota usage
+            self.quota_manager.record_usage(1)
+            
+            details = {}
+            for item in response['items']:
+                video_id = item['id']
+                content_details = item.get('contentDetails', {})
+                statistics = item.get('statistics', {})
+                
+                details[video_id] = {
+                    'duration': content_details.get('duration'),
+                    'view_count': int(statistics.get('viewCount', 0)) if statistics.get('viewCount') else None,
+                    'like_count': int(statistics.get('likeCount', 0)) if statistics.get('likeCount') else None,
+                    'comment_count': int(statistics.get('commentCount', 0)) if statistics.get('commentCount') else None
+                }
+            
+            return details
+            
+        except Exception as e:
+            logger.warning(f"Could not get video details: {e}")
+            return {}

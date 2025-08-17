@@ -14,7 +14,10 @@ load_dotenv()
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.tools.youtube_api import YouTubeAPIClient
-from src.models.youtube import CommentRequest, QuotaStatus, SlimYouTubeComment, MetadataRequest
+from src.models.youtube import (
+    CommentRequest, QuotaStatus, SlimYouTubeComment, MetadataRequest,
+    ChannelSearchRequest, VideoListRequest
+)
 
 # Initialize MCP server with stateless HTTP for streamable transport
 mcp = FastMCP("YouTube Comment Downloader", stateless_http=True)
@@ -631,7 +634,199 @@ async def get_quota_status() -> dict:
             raise
         raise ToolError(f"Failed to check quota status: {str(e)}")
 
+@mcp.tool()
+async def find_channel(
+    channel_name: str,
+    max_results: int = 10
+) -> dict:
+    """
+    Search for YouTube channels by name or partial name.
+    
+    Find channels using partial or complete channel names. Returns channel IDs,
+    subscriber counts, and other metadata needed for subsequent video searches.
+    This is the first step in the workflow: find channel → get videos → search comments.
+    
+    Perfect for: "Find channel named...", "Search for channel...", "Get channel ID for..."
+    
+    Args:
+        channel_name: Channel name or partial name to search for
+        max_results: Maximum number of channels to return (1-50, default: 10)
+    
+    Returns:
+        Dictionary with matching channels and their metadata
+    """
+    try:
+        if not isinstance(channel_name, str) or not channel_name.strip():
+            raise ToolError("channel_name must be a non-empty string")
+        
+        if not 1 <= max_results <= 50:
+            raise ToolError("max_results must be between 1 and 50")
+        
+        client = get_api_client()
+        request = ChannelSearchRequest(
+            channel_name=channel_name.strip(),
+            max_results=max_results
+        )
+        
+        response = await client.search_channels(request)
+        quota_status = client.get_quota_status()
+        
+        # Format channel results for display
+        formatted_channels = []
+        for channel in response.channels:
+            formatted_channel = {
+                "channel_id": channel.channel_id,
+                "title": channel.title,
+                "description": channel.description,
+                "subscriber_count": channel.subscriber_count,
+                "video_count": channel.video_count,
+                "view_count": channel.view_count,
+                "custom_url": channel.custom_url,
+                "thumbnail_url": channel.thumbnail_url,
+                "published_at": channel.published_at
+            }
+            formatted_channels.append(formatted_channel)
+        
+        return {
+            "search_query": response.search_query,
+            "total_results": response.total_results,
+            "channels": formatted_channels,
+            "usage_info": {
+                "quota_used": response.quota_used,
+                "quota_remaining": quota_status['remaining'] - response.quota_used,
+                "high_cost_operation": True,
+                "cost_note": "Channel search costs 100 units (1% of daily quota)"
+            },
+            "next_steps": {
+                "get_videos": "Use get_channel_videos(channel_id, title_filter) to list videos",
+                "workflow": "1. find_channel → 2. get_channel_videos → 3. search_comments"
+            },
+            "api_metadata": {
+                "quota_used": response.quota_used,
+                "quota_remaining": quota_status['remaining'] - response.quota_used,
+                "data_source": "YouTube Data API v3"
+            }
+        }
+        
+    except Exception as e:
+        if isinstance(e, ToolError):
+            raise
+        raise ToolError(f"Failed to search channels: {str(e)}")
 
+@mcp.tool()
+async def get_channel_videos(
+    channel_id: str,
+    title_filter: str = None,
+    limit: int = 50,
+    order: str = "date"
+) -> dict:
+    """
+    Get recent videos from a YouTube channel with optional title filtering.
+    
+    List videos from a specific channel (found via find_channel) with server-side
+    title filtering. Returns video IDs, titles, and metadata needed for comment
+    searching. This is the second step: find channel → get videos → search comments.
+    
+    Perfect for: "Get recent videos from channel...", "Find videos with 'keyword' in title..."
+    
+    Args:
+        channel_id: YouTube channel ID (from find_channel results)
+        title_filter: Filter videos by title containing this text (case-insensitive, optional)
+        limit: Maximum number of videos to return (1-200, default: 50)
+        order: Sort order - 'date' (newest first), 'relevance', 'viewCount' (default: 'date')
+    
+    Returns:
+        Dictionary with filtered videos and their metadata
+    """
+    try:
+        if not isinstance(channel_id, str) or not channel_id.strip():
+            raise ToolError("channel_id must be a non-empty string")
+        
+        # Validate channel ID format
+        import re
+        if not re.match(r'^UC[a-zA-Z0-9_-]{22}$', channel_id.strip()):
+            raise ToolError("Invalid YouTube channel ID format (should start with UC and be 24 chars)")
+        
+        if not 1 <= limit <= 200:
+            raise ToolError("limit must be between 1 and 200")
+        
+        if order not in ['date', 'relevance', 'viewCount']:
+            raise ToolError("order must be 'date', 'relevance', or 'viewCount'")
+        
+        client = get_api_client()
+        request = VideoListRequest(
+            channel_id=channel_id.strip(),
+            title_filter=title_filter.strip() if title_filter else None,
+            limit=limit,
+            order=order
+        )
+        
+        response = await client.get_channel_videos(request)
+        quota_status = client.get_quota_status()
+        
+        # Format video results for display
+        formatted_videos = []
+        for video in response.videos:
+            # Format duration in human-readable format
+            duration_formatted = video.duration
+            if video.duration and video.duration.startswith('PT'):
+                import re
+                duration_match = re.match(r'PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?', video.duration)
+                if duration_match:
+                    hours, minutes, seconds = duration_match.groups()
+                    parts = []
+                    if hours:
+                        parts.append(f"{hours}h")
+                    if minutes:
+                        parts.append(f"{minutes}m")
+                    if seconds:
+                        parts.append(f"{seconds}s")
+                    duration_formatted = " ".join(parts) if parts else "0s"
+            
+            formatted_video = {
+                "video_id": video.video_id,
+                "title": video.title,
+                "description": video.description,
+                "published_at": video.published_at,
+                "duration": duration_formatted,
+                "view_count": video.view_count,
+                "like_count": video.like_count,
+                "comment_count": video.comment_count,
+                "thumbnail_url": video.thumbnail_url
+            }
+            formatted_videos.append(formatted_video)
+        
+        return {
+            "channel_id": response.channel_id,
+            "title_filter_applied": response.title_filter,
+            "filter_efficiency": {
+                "total_videos_found": response.total_videos_found,
+                "after_title_filter": response.filtered_videos_count,
+                "filter_rate": round((response.filtered_videos_count / response.total_videos_found * 100), 1) if response.total_videos_found > 0 else 0
+            },
+            "videos": formatted_videos,
+            "usage_info": {
+                "quota_used": response.quota_used,
+                "quota_remaining": quota_status['remaining'] - response.quota_used,
+                "high_cost_operation": True,
+                "cost_note": "Video listing costs 100 units (1% of daily quota)"
+            },
+            "next_steps": {
+                "search_comments": f"Use search_comments(video_id, search_terms) on any video_id from results",
+                "workflow": f"Found {len(formatted_videos)} videos ready for comment analysis",
+                "example": f"search_comments('{formatted_videos[0]['video_id']}', ['keyword']) for first video" if formatted_videos else "No videos found matching criteria"
+            },
+            "api_metadata": {
+                "quota_used": response.quota_used,
+                "quota_remaining": quota_status['remaining'] - response.quota_used,
+                "data_source": "YouTube Data API v3"
+            }
+        }
+        
+    except Exception as e:
+        if isinstance(e, ToolError):
+            raise
+        raise ToolError(f"Failed to get channel videos: {str(e)}")
 
 
 def parse_arguments():

@@ -194,3 +194,94 @@ class QuotaStatus(BaseModel):
     def is_near_limit(self) -> bool:
         """Check if quota usage is near the daily limit (>80%)."""
         return self.usage_percentage > 80
+
+class ChannelSearchRequest(BaseModel):
+    """Request model for searching channels by name."""
+    
+    channel_name: str = Field(
+        ..., 
+        min_length=1,
+        max_length=100,
+        description="Channel name or partial name to search for"
+    )
+    max_results: Optional[int] = Field(
+        default=10,
+        ge=1,
+        le=50,
+        description="Maximum number of channels to return (1-50)"
+    )
+
+class ChannelInfo(BaseModel):
+    """Model representing basic channel information."""
+    
+    channel_id: str = Field(..., description="YouTube channel ID")
+    title: str = Field(..., description="Channel name/title")
+    description: Optional[str] = Field(None, description="Channel description (truncated)")
+    subscriber_count: Optional[int] = Field(None, description="Number of subscribers")
+    video_count: Optional[int] = Field(None, description="Number of published videos")
+    view_count: Optional[int] = Field(None, description="Total channel views")
+    thumbnail_url: Optional[str] = Field(None, description="Channel thumbnail/avatar URL")
+    custom_url: Optional[str] = Field(None, description="Channel custom URL")
+    published_at: Optional[str] = Field(None, description="Channel creation date")
+
+class ChannelSearchResponse(BaseModel):
+    """Response model for channel search results."""
+    
+    search_query: str = Field(..., description="Original search query")
+    total_results: int = Field(..., description="Number of channels found")
+    channels: List[ChannelInfo] = Field(..., description="List of matching channels")
+    quota_used: int = Field(..., description="API quota units used")
+
+class VideoListRequest(BaseModel):
+    """Request model for listing videos from a channel."""
+    
+    channel_id: str = Field(
+        ...,
+        min_length=20,
+        max_length=30,
+        description="YouTube channel ID"
+    )
+    title_filter: Optional[str] = Field(
+        None,
+        description="Filter videos by title containing this text (case-insensitive)"
+    )
+    limit: Optional[int] = Field(
+        default=50,
+        ge=1,
+        le=200,
+        description="Maximum number of videos to return (1-200)"
+    )
+    order: Optional[str] = Field(
+        default="date",
+        description="Sort order: 'date' (newest first), 'relevance', 'viewCount'"
+    )
+    
+    @validator('channel_id')
+    def validate_channel_id(cls, v):
+        """Validate YouTube channel ID format."""
+        if not re.match(r'^UC[a-zA-Z0-9_-]{22}$', v):
+            raise ValueError('Invalid YouTube channel ID format (should start with UC and be 24 chars)')
+        return v
+
+class VideoInfo(BaseModel):
+    """Model representing basic video information."""
+    
+    video_id: str = Field(..., description="YouTube video ID")
+    title: str = Field(..., description="Video title")
+    description: Optional[str] = Field(None, description="Video description (truncated)")
+    published_at: str = Field(..., description="Video publish date")
+    duration: Optional[str] = Field(None, description="Video duration")
+    view_count: Optional[int] = Field(None, description="Number of views")
+    like_count: Optional[int] = Field(None, description="Number of likes")
+    comment_count: Optional[int] = Field(None, description="Number of comments")
+    thumbnail_url: Optional[str] = Field(None, description="Video thumbnail URL")
+
+class VideoListResponse(BaseModel):
+    """Response model for channel video listing."""
+    
+    channel_id: str = Field(..., description="Channel ID that was searched")
+    title_filter: Optional[str] = Field(None, description="Title filter applied")
+    total_videos_found: int = Field(..., description="Total videos found (before filtering)")
+    filtered_videos_count: int = Field(..., description="Number of videos after title filtering")
+    videos: List[VideoInfo] = Field(..., description="List of matching videos")
+    quota_used: int = Field(..., description="API quota units used")
