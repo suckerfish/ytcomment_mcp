@@ -23,6 +23,7 @@ from src.models.youtube import (
 # Initialize MCP server with stateless HTTP for streamable transport
 mcp = FastMCP("YouTube Comment Downloader", stateless_http=True)
 
+
 # Global variable to store API key from headers (for HTTP transport)
 _runtime_api_key = None
 
@@ -990,5 +991,19 @@ def main():
         # Traditional STDIO transport for local MCP clients
         mcp.run()
 
+def setup_health_endpoint():
+    """Setup health endpoint for HTTP transport."""
+    if hasattr(mcp.server, 'app'):
+        @mcp.server.app.get("/health")
+        async def health_endpoint():
+            return {
+                "status": "healthy",
+                "server": "YouTube Comment Downloader MCP",
+                "api_configured": bool(os.getenv('YOUTUBE_API_KEY')),
+                "transport": "streamable-http"
+            }
+
 if __name__ == "__main__":
+    # Add health endpoint for HTTP transport
+    setup_health_endpoint()
     main()
