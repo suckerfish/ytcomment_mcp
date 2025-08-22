@@ -1,8 +1,8 @@
 # Docker Deployment for YouTube Comment MCP Server
 
-## Simple HTTP Setup (Recommended)
+## Simple HTTP Setup
 
-This setup runs the MCP server in Docker with HTTP transport, completely bypassing MetaMCP's STDIO environment variable limitation.
+This setup runs the MCP server in Docker with HTTP transport for easy integration with MCP clients.
 
 ### Quick Start
 
@@ -15,7 +15,11 @@ cp .env.example .env
 
 2. **Deploy:**
 ```bash
-docker-compose -f simple-docker-compose.yml up -d
+# Modern Docker (builds image automatically)
+docker compose -f simple-docker-compose.yml up -d
+
+# Force rebuild if needed  
+docker compose -f simple-docker-compose.yml up --build -d
 ```
 
 3. **Verify:**
@@ -29,10 +33,22 @@ curl -X POST http://localhost:8080/mcp \
   -d '{"jsonrpc":"2.0","method":"tools/list","id":"test","params":{}}'
 ```
 
-### MetaMCP Configuration
+### MCP Client Configuration
 
-MetaMCP connects via HTTP (no environment variables needed):
+Configure your MCP client to connect via HTTP:
 
+```json
+{
+  "servers": {
+    "ytcomment": {
+      "transport": "http",
+      "url": "http://localhost:8080/mcp"
+    }
+  }
+}
+```
+
+If your MCP client runs in Docker on the same network:
 ```json
 {
   "servers": {
@@ -49,17 +65,17 @@ MetaMCP connects via HTTP (no environment variables needed):
 ✅ **Simple**: No complex STDIO bridging  
 ✅ **Clean**: API key set directly in container  
 ✅ **Reliable**: HTTP transport is well-tested  
-✅ **Scalable**: Easy to add more MCP servers  
-✅ **Compatible**: Works with any MetaMCP setup  
+✅ **Scalable**: Easy to deploy and manage
+✅ **Compatible**: Works with any MCP client  
 
 ### Architecture
 
 ```
-MetaMCP Container  ──HTTP──▶  YouTube MCP Container
-     │                            │
-     │                            ├─ YOUTUBE_API_KEY (env var)
-     │                            ├─ FastMCP Server
-     │                            └─ Port 8080
+MCP Client  ──HTTP──▶  YouTube MCP Container
+     │                      │
+     │                      ├─ YOUTUBE_API_KEY (env var)
+     │                      ├─ FastMCP Server
+     │                      └─ Port 8080
      │
      └─ config.json (HTTP endpoint)
 ```
@@ -75,12 +91,12 @@ MetaMCP Container  ──HTTP──▶  YouTube MCP Container
 
 ```bash
 # Check logs
-docker-compose -f simple-docker-compose.yml logs ytcomment-mcp
+docker compose -f simple-docker-compose.yml logs ytcomment-mcp
 
 # Restart services
-docker-compose -f simple-docker-compose.yml restart
+docker compose -f simple-docker-compose.yml restart
 
 # Clean rebuild
-docker-compose -f simple-docker-compose.yml down
-docker-compose -f simple-docker-compose.yml up --build -d
+docker compose -f simple-docker-compose.yml down
+docker compose -f simple-docker-compose.yml up --build -d
 ```

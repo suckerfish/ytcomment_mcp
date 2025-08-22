@@ -12,7 +12,11 @@ nano .env
 
 ### 2. Deploy (Simple HTTP Setup)
 ```bash
-docker-compose -f simple-docker-compose.yml up -d
+# Modern Docker (builds image automatically)
+docker compose -f simple-docker-compose.yml up -d
+
+# Force rebuild if needed
+docker compose -f simple-docker-compose.yml up --build -d
 ```
 
 ### 3. Test
@@ -26,13 +30,25 @@ curl -X POST http://localhost:8080/mcp \
   -d '{"jsonrpc":"2.0","method":"tools/list","id":"test","params":{}}'
 ```
 
-### 4. Connect MetaMCP
-Use this config in MetaMCP:
+### 4. Connect Your MCP Client
+Configure your MCP client to connect:
 ```json
 {
   "servers": {
     "ytcomment": {
       "transport": "http",
+      "url": "http://localhost:8080/mcp"
+    }
+  }
+}
+```
+
+Or if your client runs in Docker on the same network:
+```json
+{
+  "servers": {
+    "ytcomment": {
+      "transport": "http", 
       "url": "http://ytcomment-mcp:8080/mcp"
     }
   }
