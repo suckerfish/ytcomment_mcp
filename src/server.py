@@ -23,16 +23,61 @@ from src.models.youtube import (
 # Initialize MCP server with stateless HTTP for streamable transport
 mcp = FastMCP("YouTube Comment Downloader", stateless_http=True)
 
+# Global variable to store API key from headers (for HTTP transport)
+_runtime_api_key = None
+
 # Initialize API client and token counter
 api_client = None  # Will be initialized when needed with API key
 token_counter = ClaudeTokenCounter()  # Token counting using Claude patterns
 
 def get_api_client() -> YouTubeAPIClient:
     """Get or create API client with proper error handling."""
-    global api_client
-    if api_client is None:
-        api_client = YouTubeAPIClient()  # Uses YOUTUBE_API_KEY env var
+    global api_client, _runtime_api_key
+    
+    # Use runtime API key if available (from HTTP headers), otherwise env var
+    api_key = _runtime_api_key or os.getenv('YOUTUBE_API_KEY')
+    
+    if api_client is None or (api_key and api_key != getattr(api_client, '_api_key', None)):
+        if api_key:
+            # Temporarily set env var for YouTubeAPIClient
+            original_key = os.getenv('YOUTUBE_API_KEY')
+            os.environ['YOUTUBE_API_KEY'] = api_key
+            api_client = YouTubeAPIClient()
+            api_client._api_key = api_key  # Store for comparison
+            if original_key:
+                os.environ['YOUTUBE_API_KEY'] = original_key
+            elif 'YOUTUBE_API_KEY' in os.environ:
+                del os.environ['YOUTUBE_API_KEY']
+        else:
+            api_client = YouTubeAPIClient()  # Uses YOUTUBE_API_KEY env var
     return api_client
+
+@mcp.tool()
+async def health_check() -> dict:
+    """
+    Health check endpoint for Docker deployments.
+    
+    Returns server status and basic configuration info.
+    """
+    try:
+        # Quick API client check
+        client = get_api_client()
+        quota_status = client.get_quota_status()
+        
+        return {
+            "status": "healthy",
+            "server": "YouTube Comment Downloader MCP",
+            "api_configured": bool(os.getenv('YOUTUBE_API_KEY') or _runtime_api_key),
+            "quota_session_usage": quota_status.get('requests_made', 0),
+            "transport": "streamable-http" if hasattr(mcp, '_transport') else "stdio",
+            "timestamp": "2024-08-22T00:00:00Z"  # Would be actual timestamp
+        }
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "error": str(e),
+            "server": "YouTube Comment Downloader MCP"
+        }
 
 @mcp.tool()
 async def download_comments(
@@ -872,8 +917,8 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description='YouTube Comment Downloader MCP Server')
     parser.add_argument('--port', type=int, default=8000, help='Server port (default: 8000)')
     parser.add_argument('--debug', action='store_true', help='Enable debug mode')
-    parser.add_argument('--transport', choices=['stdio', 'sse', 'streamable-http'], default='stdio', 
-                       help='Transport protocol: stdio for local use, sse/streamable-http for remote deployment')
+    parser.add_argument('--transport', choices=['stdio', 'sse', 'streamable-http', 'dual'], default='stdio', 
+                       help='Transport protocol: stdio for local use, sse/streamable-http for remote deployment, dual for both')
     parser.add_argument('--host', default='127.0.0.1', help='Host to bind to for HTTP transport (default: 127.0.0.1)')
     parser.add_argument('--youtube-api-key', help='YouTube Data API key (optional, can use YOUTUBE_API_KEY env var)')
     return parser.parse_args()
@@ -909,6 +954,38 @@ def main():
             port=args.port,
             log_level="debug" if args.debug else "info"
         )
+    elif args.transport == 'dual':
+        # Run both STDIO and HTTP transport simultaneously
+        import threading
+        import time
+        
+        def run_http_server():
+            # Create separate MCP instance for HTTP
+            from fastmcp import FastMCP
+            http_mcp = FastMCP("YouTube Comment Downloader HTTP", stateless_http=True)
+            
+            # Register all tools on HTTP instance
+            for tool_name, tool_func in mcp._tools.items():
+                http_mcp._tools[tool_name] = tool_func
+            
+            http_mcp.run(
+                transport="streamable-http",
+                host=args.host,
+                port=args.port,
+                log_level="debug" if args.debug else "info"
+            )
+        
+        # Start HTTP server in background thread
+        http_thread = threading.Thread(target=run_http_server, daemon=True)
+        http_thread.start()
+        
+        # Give HTTP server time to start
+        time.sleep(2)
+        print(f"HTTP server started on {args.host}:{args.port}")
+        print("STDIO server starting...")
+        
+        # Run STDIO in main thread
+        mcp.run()
     else:
         # Traditional STDIO transport for local MCP clients
         mcp.run()

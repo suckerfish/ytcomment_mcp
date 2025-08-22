@@ -1,0 +1,16 @@
+{
+  "servers": {
+    "ytcomment": {
+      "command": "docker",
+      "args": [
+        "exec",
+        "-e", "YOUTUBE_API_KEY=${YOUTUBE_API_KEY}",
+        "ytcomment-mcp-server",
+        "uv", "run", "python", "src/server.py"
+      ],
+      "env": {
+        "YOUTUBE_API_KEY": "your-api-key-here"
+      }
+    }
+  }
+}

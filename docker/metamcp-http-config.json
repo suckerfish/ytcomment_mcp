@@ -1,0 +1,10 @@
+{
+  "servers": {
+    "ytcomment": {
+      "transport": "http",
+      "url": "http://ytcomment-mcp:8080/mcp",
+      "timeout": 60,
+      "description": "YouTube Comment Downloader MCP Server"
+    }
+  }
+}

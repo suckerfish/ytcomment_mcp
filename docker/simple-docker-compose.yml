@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  ytcomment-mcp:
+    build: 
+      context: ..
+      dockerfile: docker/SimpleDockerfile
+    container_name: ytcomment-mcp-http
+    environment:
+      - YOUTUBE_API_KEY=${YOUTUBE_API_KEY}
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  metamcp:
+    image: metamcp:latest  # Replace with actual MetaMCP image
+    container_name: metamcp
+    volumes:
+      - ./metamcp-http-config.json:/config/config.json
+    depends_on:
+      ytcomment-mcp:
+        condition: service_healthy
+    restart: unless-stopped

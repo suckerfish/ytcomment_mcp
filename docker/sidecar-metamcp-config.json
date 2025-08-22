@@ -1,0 +1,14 @@
+{
+  "servers": {
+    "ytcomment": {
+      "command": "uv",
+      "args": [
+        "run", "python", "/app/src/server.py", "--transport", "stdio"
+      ],
+      "cwd": "/app",
+      "env": {
+        "YOUTUBE_API_KEY": "${YOUTUBE_API_KEY}"
+      }
+    }
+  }
+}
