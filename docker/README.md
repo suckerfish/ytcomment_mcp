@@ -16,10 +16,10 @@ cp .env.example .env
 2. **Deploy:**
 ```bash
 # Modern Docker (builds image automatically)
-docker compose -f simple-docker-compose.yml up -d
+docker compose up -d
 
 # Force rebuild if needed  
-docker compose -f simple-docker-compose.yml up --build -d
+docker compose up --build -d
 ```
 
 3. **Verify:**
@@ -91,12 +91,12 @@ MCP Client  ──HTTP──▶  YouTube MCP Container
 
 ```bash
 # Check logs
-docker compose -f simple-docker-compose.yml logs ytcomment-mcp
+docker compose logs ytcomment-mcp
 
 # Restart services
-docker compose -f simple-docker-compose.yml restart
+docker compose restart
 
 # Clean rebuild
-docker compose -f simple-docker-compose.yml down
-docker compose -f simple-docker-compose.yml up --build -d
+docker compose down
+docker compose up --build -d
 ```

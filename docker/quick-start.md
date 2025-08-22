@@ -13,10 +13,10 @@ nano .env
 ### 2. Deploy (Simple HTTP Setup)
 ```bash
 # Modern Docker (builds image automatically)
-docker compose -f simple-docker-compose.yml up -d
+docker compose up -d
 
 # Force rebuild if needed
-docker compose -f simple-docker-compose.yml up --build -d
+docker compose up --build -d
 ```
 
 ### 3. Test
