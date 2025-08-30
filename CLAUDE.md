@@ -8,6 +8,12 @@ This is a YouTube Comment Downloader MCP server that allows AI systems to downlo
 
 The server uses the YouTube Data API v3 for 100% accurate comment data with server-side filtering to minimize token usage and optimize LLM context efficiency. All tools automatically provide precise token counts using Claude's tokenization patterns.
 
+## Project Standards
+
+### Compose Files
+- Use `compose.yaml` (new Docker Compose standard) instead of `docker-compose.yml`
+- Follow modern Docker Compose naming conventions
+
 ## Quick Commands
 
 ### Testing the YouTube Comment Server
