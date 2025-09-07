@@ -1,26 +1,37 @@
 FROM python:3.11-slim
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
+# Install system dependencies (minimal)
+RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
 
+# Set working directory
 WORKDIR /app
 
-# Install uv
-RUN pip install uv
+# Install uv (pinned version for reproducibility)
+RUN pip install --no-cache-dir uv==0.8.15
 
-# Copy project files
-COPY . .
+# Copy dependency files first (for better caching)
+COPY pyproject.toml ./
+COPY uv.lock* ./
 
-# Install dependencies
-RUN uv pip install --system -e .
+# Install dependencies in a separate layer (cached unless dependencies change)
+RUN uv pip install --system --no-cache .
+
+# Copy application code (this layer changes most frequently)
+COPY src/ ./src/
+
+# Create non-root user for security
+RUN adduser --disabled-password --gecos '' --shell /bin/bash appuser \
+    && chown -R appuser:appuser /app
+USER appuser
 
 # Expose port
 EXPOSE 8080
 
-# Health check endpoint (optional - add to server.py if needed)
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+# Health check with lightweight curl
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
   CMD curl -f http://localhost:8080/health || exit 1
 
 # Run the server with HTTP transport
