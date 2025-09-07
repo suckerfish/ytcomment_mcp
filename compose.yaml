@@ -7,7 +7,7 @@ services:
     # Uncomment below for local development
     # build: 
     #   context: .
-    #   dockerfile: docker/SimpleDockerfile
+    #   dockerfile: Dockerfile
     container_name: ytcomment-mcp
     environment:
       - YOUTUBE_API_KEY=${YOUTUBE_API_KEY}
