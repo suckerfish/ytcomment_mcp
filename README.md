@@ -70,9 +70,8 @@ docker-compose up -d
 docker-compose up -d --build
 ```
 
-### Available Images
-- `ghcr.io/suckerfish/ytcomment_mcp:latest` - Latest stable version
-- `ghcr.io/suckerfish/ytcomment_mcp:main` - Latest from main branch  
+### Local Docker Build
+- Build locally using `docker-compose up -d --build`
 - Multi-architecture support (amd64, arm64)
 
 ## Key Features
@@ -88,9 +87,9 @@ docker-compose up -d --build
 - **Reliable data**: No scraping limitations or rate limits
 
 ### Multi-Architecture Docker Support
-- **Automated builds** via GitHub Actions
+- **Local builds** support multiple platforms
 - **Multi-platform**: linux/amd64, linux/arm64
-- **Easy deployment**: Pre-built images available on GHCR
+- **Easy deployment**: Local Docker build and deployment
 
 ## Example Usage
 
@@ -111,7 +110,7 @@ top_comments = await get_top_comments("dQw4w9WgXcQ", top_count=20, slim=True)
 
 ## Documentation
 
-- **[GHCR Deployment Guide](docs/ghcr-deployment.md)** - Docker deployment via GitHub Container Registry
+- **[Deployment Guide](docs/deployment.md)** - Local Docker deployment
 - **[Quick Start Guide](docs/quickstart.md)** - Setup and basic server creation
 - **[Authentication Guide](docs/authentication.md)** - YouTube API key setup
 - **[Testing Guide](docs/testing.md)** - MCPTools usage and testing

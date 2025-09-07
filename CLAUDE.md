@@ -73,14 +73,11 @@ uv add <package_name>
 ### Docker Deployment
 
 ```bash
-# Using pre-built GHCR image (recommended for production)
-docker-compose up -d
-
-# Local development build
+# Build and run with Docker Compose
 docker-compose up -d --build
 
-# Direct Docker run with GHCR image
-docker run -d -p 8080:8080 -e YOUTUBE_API_KEY=your-key ghcr.io/suckerfish/ytcomment_mcp:latest
+# Or just run if already built
+docker-compose up -d
 ```
 
 ### Docker Optimization Features

@@ -2,12 +2,9 @@ version: '3.8'
 
 services:
   ytcomment-mcp:
-    image: ghcr.io/suckerfish/ytcomment_mcp:latest
-    pull_policy: always
-    # Uncomment below for local development
-    # build: 
-    #   context: .
-    #   dockerfile: Dockerfile
+    build: 
+      context: .
+      dockerfile: Dockerfile
     container_name: ytcomment-mcp
     environment:
       - YOUTUBE_API_KEY=${YOUTUBE_API_KEY}
