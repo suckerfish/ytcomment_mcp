@@ -2,7 +2,7 @@
 """YouTube Comment Downloader MCP Server."""
 
 import argparse
-from fastmcp import FastMCP
+from fastmcp import FastMCP, Context
 from fastmcp.exceptions import ToolError
 import sys
 import os
@@ -17,7 +17,7 @@ from src.tools.youtube_api import YouTubeAPIClient
 from src.tools.token_counter import ClaudeTokenCounter
 from src.models.youtube import (
     CommentRequest, QuotaStatus, SlimYouTubeComment, MetadataRequest,
-    ChannelSearchRequest, VideoListRequest
+    ChannelSearchRequest, VideoListRequest, AnalysisMode
 )
 
 # Initialize MCP server with stateless HTTP for streamable transport
@@ -30,6 +30,87 @@ _runtime_api_key = None
 # Initialize API client and token counter
 api_client = None  # Will be initialized when needed with API key
 token_counter = ClaudeTokenCounter()  # Token counting using Claude patterns
+
+async def check_video_size_and_elicit(video_id: str, requested_limit: int, operation_name: str, confirm_large: bool = False) -> dict:
+    """Auto-check video size and elicit confirmation for large operations."""
+    try:
+        # Get video info to check comment count
+        client = get_api_client()
+        video_request = MetadataRequest(video_id=video_id)
+        video_metadata = await client.get_video_info(video_request)
+        total_comments = video_metadata.comment_count or 0
+        
+        # If >1000 comments and no confirmation, require elicitation
+        if total_comments > 1000 and not confirm_large:
+            # Calculate token estimates
+            tokens_per_comment = 6  # Using slim mode default
+            estimated_tokens = min(requested_limit, total_comments) * tokens_per_comment
+            
+            # Create smart recommendations
+            recommendations = []
+            if total_comments <= 2000:
+                recommendations.append(f"💡 Medium video: {total_comments:,} comments available")
+                recommendations.append(f"💡 Consider: download_comments('{video_id}', limit=1000, confirm_large_operation=True)")
+                recommendations.append(f"💡 Alternative: Use search_comments for specific terms")
+            else:
+                recommendations.append(f"💡 Large video: {total_comments:,} comments available")
+                recommendations.append(f"💡 Strongly recommend: search_comments('{video_id}', ['keyword'], max_results=50)")
+                recommendations.append(f"💡 Or: get_top_comments('{video_id}', top_count=25) for viral comments")
+                recommendations.append(f"💡 Override: {operation_name}('{video_id}', limit={requested_limit}, confirm_large_operation=True)")
+            
+            # Format duration for display
+            duration_formatted = video_metadata.duration
+            if video_metadata.duration and video_metadata.duration.startswith('PT'):
+                import re
+                duration_match = re.match(r'PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?', video_metadata.duration)
+                if duration_match:
+                    hours, minutes, seconds = duration_match.groups()
+                    parts = []
+                    if hours:
+                        parts.append(f"{hours}h")
+                    if minutes:
+                        parts.append(f"{minutes}m")
+                    if seconds:
+                        parts.append(f"{seconds}s")
+                    duration_formatted = " ".join(parts) if parts else "0s"
+            
+            return {
+                "elicitation_required": True,
+                "operation_name": operation_name,
+                "video_info": {
+                    "video_id": video_metadata.video_id,
+                    "title": video_metadata.title,
+                    "channel": video_metadata.channel_title,
+                    "duration": duration_formatted,
+                    "view_count": video_metadata.view_count,
+                    "like_count": video_metadata.like_count,
+                    "comment_count": total_comments
+                },
+                "size_analysis": {
+                    "total_comments": total_comments,
+                    "requested_limit": requested_limit,
+                    "actual_limit": min(requested_limit, total_comments),
+                    "estimated_tokens": estimated_tokens,
+                    "context_usage": f"~{round(estimated_tokens / 128000 * 100, 1)}% of 128K context" if estimated_tokens <= 128000 else "⚠️ Exceeds 128K context",
+                    "size_category": "Large" if total_comments > 5000 else "Medium"
+                },
+                "warnings": [
+                    f"🚨 Large dataset requested: {total_comments:,} total comments available",
+                    f"⚠️ Requesting {min(requested_limit, total_comments):,} comments (~{estimated_tokens:,} tokens)",
+                    f"⚠️ May consume significant LLM context ({estimated_tokens / 128000 * 100:.1f}% of 128K)",
+                    "💡 Consider using search_comments or get_top_comments for better efficiency"
+                ],
+                "recommendations": recommendations,
+                "to_proceed": f"Add confirm_large_operation=True to your {operation_name} call to proceed",
+                "api_cost_note": f"This operation will use ~{(min(requested_limit, total_comments) // 100) + 2} API quota units"
+            }
+        
+        # Proceed with operation - no elicitation needed
+        return None
+        
+    except Exception as e:
+        # If video info fails, let the main operation handle the error
+        return None
 
 def get_api_client() -> YouTubeAPIClient:
     """Get or create API client with proper error handling."""
@@ -83,27 +164,43 @@ async def health_check() -> dict:
 @mcp.tool()
 async def download_comments(
     video_id: str,
-    limit: int = 2000,
+    limit: int = 1000,
     sort: int = 1,
-    force_large_ingestion: bool = False,
+    confirm_large_operation: bool = False,
     slim: bool = True
 ) -> dict:
     """
-    Download YouTube comments with smart warnings for large datasets.
+    Download YouTube comments for CONTEXTUAL ANALYSIS by LLMs.
     
-    Primary comment download tool with intelligent context protection:
-    - Warns when requesting >1000 comments to prevent LLM context overflow
-    - Provides token usage analysis and context percentage estimates
-    - Suggests optimized alternatives for large requests
-    - Force override option for intentional large ingestion
+    🎯 **BEST FOR CONTEXTUAL ANALYSIS:**
+    - Sentiment analysis, theme detection, overall reactions
+    - Spoiler detection (LLM understands meaning, not just keywords)
+    - Toxic content analysis, controversy detection
+    - Opinion analysis, mood assessment
+    - Any task requiring AI to understand MEANING and CONTEXT
+    
+    🚫 **NOT IDEAL FOR:**
+    - Finding specific mentions/keywords (use search_comments instead)
+    - Looking for particular usernames or exact phrases
+    - When you know specific terms to search for
+    
+    💡 **RECOMMENDATION:** For ambiguous analysis requests like "check for spoilers" 
+    or "analyze sentiment", consider using analyze_comments_for_content() first - 
+    it will help choose the optimal approach automatically.
+    
+    Primary comment download tool with automatic size checking and elicitation:
+    - Automatically checks video info first to get total comment count
+    - Requires confirmation for videos with >1000 comments
+    - Provides detailed analysis and smart recommendations
+    - Prevents accidental LLM context overflow
     - 100% accurate YouTube Data API results
     - Slim mode (default) reduces data size by 87% for LLM efficiency
     
     Args:
         video_id: YouTube video ID (e.g., 'dQw4w9WgXcQ')
-        limit: Maximum comments to download (1-10000, default: 2000)
+        limit: Maximum comments to download (1-10000, default: 1000)
         sort: Sort order - 0 for popular/relevance, 1 for recent/time (default: 1)
-        force_large_ingestion: Bypass warnings for large datasets (default: False)
+        confirm_large_operation: Confirm downloading from videos with >1000 comments (default: False)
         slim: Return only essential fields for 87% size reduction (default: True)
     
     Returns:
@@ -113,32 +210,19 @@ async def download_comments(
         if not 1 <= limit <= 10000:
             raise ToolError("limit must be between 1 and 10000")
         
+        # Check video size and elicit confirmation if needed
+        elicitation_response = await check_video_size_and_elicit(
+            video_id, limit, "download_comments", confirm_large_operation
+        )
+        if elicitation_response:
+            return elicitation_response
+        
         # Calculate estimated token usage
         tokens_per_comment = 6 if slim else 25  # ~6 tokens for slim, ~25 for full
         estimated_tokens = limit * tokens_per_comment
         
-        # Warning system for large ingestion
+        # Warning system for very large ingestion
         warnings = []
-        if limit > 2000 and not force_large_ingestion:
-            warnings.append(f"⚠️ Large dataset requested: {limit} comments (~{estimated_tokens:,} tokens)")
-            warnings.append(f"⚠️ This may exceed LLM context limits")
-            warnings.append(f"💡 Consider using search_comments or get_top_comments instead")
-            warnings.append(f"💡 Or set force_large_ingestion=true to proceed anyway")
-            
-            return {
-                "video_id": video_id,
-                "warning_triggered": True,
-                "requested_limit": limit,
-                "estimated_tokens": estimated_tokens,
-                "warnings": warnings,
-                "alternatives": {
-                    "search_comments": "Search for specific terms with limited results",
-                    "get_top_comments": "Get only the most popular comments",
-                    "force_override": "Set force_large_ingestion=true to proceed"
-                },
-                "recommendation": f"Use search_comments with max_results=50-200 or get_top_comments with top_count=25-100"
-            }
-        
         if limit > 4000:
             warnings.append(f"⚠️ Very large dataset: {limit} comments (~{estimated_tokens:,} tokens)")
             warnings.append(f"📊 May consume significant LLM context")
@@ -205,12 +289,23 @@ async def download_comments(
 @mcp.tool()
 async def get_comment_stats(
     video_id: str,
-    limit: int = 2000,
+    limit: int = 1000,
     sort: int = 1,
+    confirm_large_operation: bool = False,
     slim: bool = True
 ) -> dict:
     """
     Get statistical analysis and engagement metrics (context-efficient).
+    
+    🎯 **BEST FOR QUANTITATIVE ANALYSIS:**
+    - Statistical overview of comment patterns
+    - Engagement metrics and like distributions  
+    - Quick sample of comments for overview
+    - Understanding video comment demographics
+    - Getting metrics without downloading all comments
+    
+    💡 **FOR DEEPER ANALYSIS:** If you need to analyze comment content, themes, 
+    or sentiment, use analyze_comments_for_content() or download_comments() instead.
     
     Provides accurate statistics without flooding context:
     - Accurate like counts and engagement metrics
@@ -221,14 +316,22 @@ async def get_comment_stats(
     
     Args:
         video_id: YouTube video ID (e.g., 'dQw4w9WgXcQ')  
-        limit: Maximum comments to analyze (1-10000, default: 2000)
+        limit: Maximum comments to analyze (1-10000, default: 1000)
         sort: Sort order - 0 for popular, 1 for recent (default: 1)
+        confirm_large_operation: Confirm analyzing videos with >1000 comments (default: False)
         slim: Return only essential fields in sample comments (default: True)
     
     Returns:
         Dictionary with accurate statistics and sample comments
     """
     try:
+        # Check video size and elicit confirmation if needed
+        elicitation_response = await check_video_size_and_elicit(
+            video_id, limit, "get_comment_stats", confirm_large_operation
+        )
+        if elicitation_response:
+            return elicitation_response
+        
         client = get_api_client()
         request = CommentRequest(
             video_id=video_id,
@@ -300,10 +403,26 @@ async def search_comments(
     slim: bool = True
 ) -> dict:
     """
-    Server-side keyword search optimized for LLM ingestion.
+    Search for SPECIFIC KEYWORDS or PHRASES in comments.
     
-    Searches through comments server-side and returns only matching results,
-    dramatically reducing token usage and improving LLM context efficiency:
+    🎯 **BEST FOR KEYWORD-BASED SEARCH:**
+    - Finding mentions of specific people, places, products, events
+    - Looking for comments containing exact phrases or terms
+    - When you know specific keywords to search for
+    - Efficient searching in large videos (1000s of comments)
+    - Finding references, quotes, or specific topics
+    
+    🚫 **NOT IDEAL FOR:**
+    - Sentiment analysis, theme detection, mood assessment
+    - Spoiler detection (spoilers often avoid obvious keywords)
+    - Contextual analysis requiring understanding of meaning
+    - When you want AI to analyze overall patterns/themes
+    
+    💡 **RECOMMENDATION:** For analysis tasks like "check for spoilers" or "analyze sentiment",
+    use analyze_comments_for_content() or download_comments() instead - they provide
+    contextual understanding rather than just keyword matching.
+    
+    Server-side keyword search optimized for LLM ingestion:
     - Multiple search terms with OR logic (matches any term)
     - Server-side filtering before sending to LLM
     - Configurable result limits for token optimization
@@ -717,6 +836,186 @@ async def get_quota_status() -> dict:
         if isinstance(e, ToolError):
             raise
         raise ToolError(f"Failed to check quota status: {str(e)}")
+
+@mcp.tool()
+async def analyze_comments_for_content(
+    video_id: str,
+    analysis_request: str
+) -> dict:
+    """
+    Analyze comments for specific content with intelligent approach selection.
+    
+    This tool helps distinguish between two fundamentally different analysis approaches:
+    - **Contextual Analysis**: Download all comments for deep AI understanding (best for spoilers, sentiment, themes, reactions)
+    - **Keyword Search**: Find specific terms or phrases (best for mentions, specific topics)
+    
+    The tool will elicit the user's preferred approach or intelligently recommend based on the request type.
+    Perfect for requests like "check for spoilers", "analyze sentiment", "find toxic comments", etc.
+    
+    Args:
+        video_id: YouTube video ID (e.g., 'dQw4w9WgXcQ')
+        analysis_request: Description of what you want to analyze (e.g., "check for spoilers")
+    
+    Returns:
+        Dictionary with either full comments for contextual analysis or guidance for keyword search
+    """
+    try:
+        from fastmcp.server.context import get_context
+        ctx = get_context()
+        # Get video info first to understand scope
+        video_info_request = MetadataRequest(video_id=video_id)
+        client = get_api_client()
+        video_info = await client.get_video_info(video_info_request)
+        comment_count = video_info.comment_count or 0
+        
+        # Create contextual elicitation message
+        elicitation_message = f"""You want to "{analysis_request}" in {comment_count:,} comments from:
+📹 **{video_info.title}** by {video_info.channel_title}
+
+**Choose your analysis approach:**
+
+🧠 **Full Context**: Download all comments for deep AI analysis
+   • Best for: spoilers, sentiment, themes, reactions, toxic content
+   • AI reads every comment and understands meaning/context
+   • Tokens used: ~{min(comment_count, 2000) * 6:,} (for up to 2000 comments)
+
+🔍 **Keyword Search**: Search for specific terms/phrases  
+   • Best for: mentions of specific people/things, exact phrases
+   • Much faster, uses fewer tokens
+   • You'll need to specify search terms
+
+🤖 **Let Me Decide**: I'll choose the best approach for your request
+   • Automatic selection based on request type and video size"""
+
+        # Elicit user preference
+        analysis_mode = await ctx.elicit(
+            elicitation_message,
+            response_type=AnalysisMode
+        )
+        
+        if analysis_mode.action != "accept":
+            return {
+                "cancelled": True,
+                "message": "Analysis cancelled by user"
+            }
+        
+        chosen_approach = analysis_mode.data.approach
+        
+        # Auto-decide logic if user chose "let_me_decide"
+        if chosen_approach == "let_me_decide":
+            # Heuristics for contextual analysis requests
+            contextual_keywords = [
+                "spoiler", "sentiment", "theme", "opinion", "reaction", "feeling", 
+                "toxic", "positive", "negative", "controversial", "analyze", 
+                "understand", "mood", "atmosphere", "vibe", "overall"
+            ]
+            
+            # Keywords that suggest search-based approach
+            search_keywords = [
+                "mention", "find", "search", "looking for", "contains", 
+                "says", "talks about", "reference", "specific"
+            ]
+            
+            request_lower = analysis_request.lower()
+            
+            # Check for contextual indicators
+            contextual_score = sum(1 for keyword in contextual_keywords if keyword in request_lower)
+            search_score = sum(1 for keyword in search_keywords if keyword in request_lower)
+            
+            if contextual_score > search_score and comment_count <= 2000:
+                chosen_approach = "full_context"
+                auto_reasoning = f"Detected contextual analysis request ('{analysis_request}') with manageable video size ({comment_count:,} comments)"
+            elif search_score > contextual_score or comment_count > 2000:
+                chosen_approach = "keyword_search"
+                auto_reasoning = f"Detected search-based request or large video ('{analysis_request}', {comment_count:,} comments)"
+            else:
+                # Default to contextual for ambiguous cases if video is small enough
+                chosen_approach = "full_context" if comment_count <= 1000 else "keyword_search"
+                auto_reasoning = f"Ambiguous request - defaulting to {'contextual' if chosen_approach == 'full_context' else 'search'} approach based on video size"
+        else:
+            auto_reasoning = analysis_mode.data.reasoning or "User explicitly chose this approach"
+        
+        # Execute the chosen approach
+        if chosen_approach == "full_context":
+            # Download comments for contextual analysis
+            download_limit = min(comment_count, 2000)  # Cap at 2000 for context safety
+            
+            comments_response = await download_comments(
+                video_id=video_id,
+                limit=download_limit,
+                sort=1,  # Recent sort for broader representation
+                confirm_large_operation=True,  # Bypass size check since we already confirmed
+                slim=True  # Use slim format for efficiency
+            )
+            
+            return {
+                "approach_used": "full_context_analysis",
+                "analysis_request": analysis_request,
+                "reasoning": auto_reasoning,
+                "video_info": {
+                    "title": video_info.title,
+                    "channel": video_info.channel_title,
+                    "total_comments": comment_count
+                },
+                "comments_for_analysis": comments_response["comments"],
+                "analysis_guidance": {
+                    "instruction_to_llm": f"Analyze these {len(comments_response['comments'])} comments to: {analysis_request}. Use your contextual understanding and natural language processing - don't just search for keywords.",
+                    "approach": "Read through all comments and apply contextual understanding",
+                    "context": f"These are real YouTube comments from '{video_info.title}'"
+                },
+                "token_analysis": comments_response["token_analysis"],
+                "efficiency_note": f"Using slim format - 87% more efficient than full metadata"
+            }
+        
+        else:  # keyword_search approach
+            return {
+                "approach_used": "keyword_search_recommended",
+                "analysis_request": analysis_request,
+                "reasoning": auto_reasoning,
+                "video_info": {
+                    "title": video_info.title,
+                    "channel": video_info.channel_title,
+                    "total_comments": comment_count
+                },
+                "next_steps": {
+                    "action_needed": "Please specify search terms for keyword-based analysis",
+                    "recommended_tool": "search_comments",
+                    "example_usage": f"search_comments('{video_id}', ['spoiler', 'ending', 'plot'], max_results=50)",
+                    "why_search": "Search approach is more efficient for large videos or when looking for specific mentions"
+                },
+                "search_suggestions": _generate_search_suggestions(analysis_request),
+                "alternative": f"If you want contextual analysis instead, use: download_comments('{video_id}', limit={min(comment_count, 1000)}, confirm_large_operation=True)"
+            }
+        
+    except Exception as e:
+        if isinstance(e, ToolError):
+            raise
+        raise ToolError(f"Failed to analyze comments: {str(e)}")
+
+def _generate_search_suggestions(analysis_request: str) -> list[str]:
+    """Generate suggested search terms based on analysis request."""
+    request_lower = analysis_request.lower()
+    
+    # Common term mappings for different analysis types
+    term_mapping = {
+        "spoiler": ["spoiler", "spoilers", "ending", "finale", "dies", "death", "plot twist", "reveal"],
+        "sentiment": ["love", "hate", "amazing", "terrible", "great", "awful", "best", "worst"],
+        "toxic": ["toxic", "hate", "stupid", "idiot", "trash", "garbage", "sucks", "terrible"],
+        "controversy": ["controversial", "drama", "problem", "issue", "wrong", "bad", "outrage"],
+        "reaction": ["reaction", "react", "omg", "wow", "amazing", "shocked", "surprised"]
+    }
+    
+    suggestions = []
+    for category, terms in term_mapping.items():
+        if category in request_lower:
+            suggestions.extend(terms[:5])  # Take first 5 terms
+            break
+    
+    # Fallback generic suggestions
+    if not suggestions:
+        suggestions = ["good", "bad", "amazing", "terrible", "love", "hate"]
+    
+    return suggestions[:8]  # Limit to 8 suggestions
 
 @mcp.tool()
 async def find_channel(

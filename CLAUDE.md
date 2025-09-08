@@ -98,21 +98,23 @@ The project follows Docker best practices for optimal build performance:
 
 ### Available MCP Tools - Streamlined & LLM-Optimized
 
-**✅ 8 CORE TOOLS (100% Reliable via YouTube Data API):**
+**✅ 9 CORE TOOLS (100% Reliable via YouTube Data API):**
 
 **📊 Comment Analysis Tools:**
 1. **`get_video_info`** - Lightweight video metadata with total comment count (RECOMMENDED FIRST STEP)
-2. **`download_comments`** - Smart comment download with 87% size reduction (slim mode default)
-3. **`search_comments`** - Server-side filtered search with 99%+ token reduction + slim format
-4. **`get_top_comments`** - Server-side popularity sorting + 87% size reduction (slim mode default)
-5. **`get_comment_stats`** - Statistical analysis with slim sample comments (87% smaller)
-6. **`get_quota_status`** - Monitor API usage and remaining capacity
+2. **`analyze_comments_for_content`** - **🌟 SMART ANALYSIS TOOL** - Elicitation-powered approach selection (NEW!)
+3. **`download_comments`** - Smart comment download with 87% size reduction (slim mode default)
+4. **`search_comments`** - Server-side filtered search with 99%+ token reduction + slim format
+5. **`get_top_comments`** - Server-side popularity sorting + 87% size reduction (slim mode default)
+6. **`get_comment_stats`** - Statistical analysis with slim sample comments (87% smaller)
+7. **`get_quota_status`** - Monitor API usage and remaining capacity
 
 **🔍 Channel Discovery Tools:**
-7. **`find_channel`** - Search YouTube channels by name/partial name (NEW!)
-8. **`get_channel_videos`** - List channel videos with server-side title filtering (NEW!)
+8. **`find_channel`** - Search YouTube channels by name/partial name (NEW!)
+9. **`get_channel_videos`** - List channel videos with server-side title filtering (NEW!)
 
 **🚀 Key Features:**
+- **🌟 Smart Analysis Selection** - Elicitation-powered tool distinguishes contextual vs keyword analysis
 - **Slim Mode (Default)** - 87% size reduction with only essential comment fields
 - **Server-side filtering** reduces token usage by 99%+ for LLM efficiency
 - **Smart warning system** prevents accidental context overflow (>2000 comments)
@@ -125,6 +127,33 @@ The project follows Docker best practices for optimal build performance:
 - **Title filtering** - Server-side video filtering by title keywords for targeted analysis
 
 ### Enhanced Workflows
+
+**🌟 SMART ANALYSIS WORKFLOW (NEW!):**
+```python
+# The intelligent approach selector - perfect for ambiguous requests
+result = await analyze_comments_for_content(
+    video_id="dQw4w9WgXcQ",
+    analysis_request="check for spoilers"  # Ambiguous: could be contextual or keyword-based
+)
+
+# Tool will elicit user preference:
+# 🧠 Full Context: Download all comments for deep AI analysis
+# 🔍 Keyword Search: Search for specific terms/phrases  
+# 🤖 Let Me Decide: I'll choose the best approach for your request
+
+# If user chooses "Full Context" or "Let Me Decide" → contextual analysis:
+# Returns all comments with guidance: "Analyze these comments for spoilers using 
+# contextual understanding - don't just search for keywords"
+
+# If user chooses "Keyword Search" → returns search suggestions:
+# Suggests terms like: ["spoiler", "ending", "finale", "dies", "plot twist"]
+```
+
+**📊 WHEN TO USE EACH TOOL:**
+- `analyze_comments_for_content()` - **START HERE** for any content analysis request
+- `download_comments()` - When you're certain you want full contextual analysis
+- `search_comments()` - When you know specific keywords/phrases to search for
+- `get_video_info()` - Always good first step to understand video scope
 
 **🔍 CHANNEL DISCOVERY WORKFLOW (NEW!):**
 ```python
@@ -238,6 +267,14 @@ All comment retrieval tools now provide **accurate token counting** using Claude
 
 **📊 Streamlined Tool Usage with Slim Mode:**
 ```python
+# 🌟 SMART ANALYSIS TOOL (NEW!) - START HERE FOR CONTENT ANALYSIS
+# Automatically chooses between contextual analysis vs keyword search
+result = await analyze_comments_for_content(
+    video_id="dQw4w9WgXcQ",
+    analysis_request="check for spoilers"  # Works for any analysis request
+)
+# Returns either full comments for AI analysis or search term suggestions
+
 # CHANNEL DISCOVERY TOOLS (NEW!)
 # Find channels by name or partial name
 channels = await find_channel(

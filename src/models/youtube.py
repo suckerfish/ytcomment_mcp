@@ -1,6 +1,6 @@
 """Pydantic models for YouTube comment data."""
 
-from typing import Optional, List
+from typing import Optional, List, Literal
 from pydantic import BaseModel, Field, validator
 import re
 
@@ -285,3 +285,15 @@ class VideoListResponse(BaseModel):
     filtered_videos_count: int = Field(..., description="Number of videos after title filtering")
     videos: List[VideoInfo] = Field(..., description="List of matching videos")
     quota_used: int = Field(..., description="API quota units used")
+
+class AnalysisMode(BaseModel):
+    """Model for analysis approach selection via elicitation."""
+    
+    approach: Literal["full_context", "keyword_search", "let_me_decide"] = Field(
+        ...,
+        description="Analysis approach: full_context for contextual AI analysis, keyword_search for specific terms, let_me_decide for automatic selection"
+    )
+    reasoning: Optional[str] = Field(
+        None,
+        description="Optional explanation of why this approach was chosen"
+    )
