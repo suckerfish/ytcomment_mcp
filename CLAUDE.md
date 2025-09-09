@@ -98,11 +98,11 @@ The project follows Docker best practices for optimal build performance:
 
 ### Available MCP Tools - Streamlined & LLM-Optimized
 
-**✅ 9 CORE TOOLS (100% Reliable via YouTube Data API):**
+**✅ 10 CORE TOOLS (100% Reliable via YouTube Data API):**
 
 **📊 Comment Analysis Tools:**
 1. **`get_video_info`** - Lightweight video metadata with total comment count (RECOMMENDED FIRST STEP)
-2. **`analyze_comments_for_content`** - **🌟 SMART ANALYSIS TOOL** - Elicitation-powered approach selection (NEW!)
+2. **`analyze_comments_for_content`** - **🌟 SMART ANALYSIS TOOL** - Auto-detects contextual vs keyword analysis
 3. **`download_comments`** - Smart comment download with 87% size reduction (slim mode default)
 4. **`search_comments`** - Server-side filtered search with 99%+ token reduction + slim format
 5. **`get_top_comments`** - Server-side popularity sorting + 87% size reduction (slim mode default)
@@ -110,11 +110,14 @@ The project follows Docker best practices for optimal build performance:
 7. **`get_quota_status`** - Monitor API usage and remaining capacity
 
 **🔍 Channel Discovery Tools:**
-8. **`find_channel`** - Search YouTube channels by name/partial name (NEW!)
-9. **`get_channel_videos`** - List channel videos with server-side title filtering (NEW!)
+8. **`find_channel`** - Search YouTube channels by name/partial name
+9. **`get_channel_videos`** - List channel videos with server-side title filtering
+
+**🧪 Testing Tools:**
+10. **`test_elicitation`** - Test FastMCP elicitation functionality (for debugging)
 
 **🚀 Key Features:**
-- **🌟 Smart Analysis Selection** - Elicitation-powered tool distinguishes contextual vs keyword analysis
+- **🌟 Smart Analysis Selection** - Auto-detects whether to use contextual analysis or keyword search
 - **Slim Mode (Default)** - 87% size reduction with only essential comment fields
 - **Server-side filtering** reduces token usage by 99%+ for LLM efficiency
 - **Smart warning system** prevents accidental context overflow (>2000 comments)
@@ -128,25 +131,31 @@ The project follows Docker best practices for optimal build performance:
 
 ### Enhanced Workflows
 
-**🌟 SMART ANALYSIS WORKFLOW (NEW!):**
+**🌟 SMART ANALYSIS WORKFLOW:**
 ```python
-# The intelligent approach selector - perfect for ambiguous requests
+# Auto-detects the best approach - perfect for ambiguous requests
 result = await analyze_comments_for_content(
     video_id="dQw4w9WgXcQ",
-    analysis_request="check for spoilers"  # Ambiguous: could be contextual or keyword-based
+    analysis_request="check for spoilers"  # Auto-detects: contextual analysis needed
 )
 
-# Tool will elicit user preference:
-# 🧠 Full Context: Download all comments for deep AI analysis
-# 🔍 Keyword Search: Search for specific terms/phrases  
-# 🤖 Let Me Decide: I'll choose the best approach for your request
+# Tool automatically chooses:
+# 🤖 For "spoilers", "sentiment", "toxic": → Contextual analysis (downloads comments)
+# 🔍 For "mentions", "find", "specific": → Keyword search (suggests search terms)
+# 📊 For large videos (>2000 comments): → Keyword search for efficiency
 
-# If user chooses "Full Context" or "Let Me Decide" → contextual analysis:
-# Returns all comments with guidance: "Analyze these comments for spoilers using 
-# contextual understanding - don't just search for keywords"
+# Manual override options:
+result = await analyze_comments_for_content(
+    video_id="dQw4w9WgXcQ", 
+    analysis_request="check for spoilers",
+    approach="contextual"  # Force contextual analysis
+)
 
-# If user chooses "Keyword Search" → returns search suggestions:
-# Suggests terms like: ["spoiler", "ending", "finale", "dies", "plot twist"]
+result = await analyze_comments_for_content(
+    video_id="dQw4w9WgXcQ",
+    analysis_request="check for spoilers", 
+    approach="search"  # Force keyword search suggestions
+)
 ```
 
 **📊 WHEN TO USE EACH TOOL:**
@@ -191,7 +200,7 @@ print(f"Total comments: {info['statistics']['comment_count']:,}")
 # Step 2: Use optimal strategy (now simplified with auto-sizing!)
 # For ALL video sizes - just call download_comments without limit
 comments = await download_comments("dQw4w9WgXcQ")
-# Auto-sizes: downloads ALL comments for ≤1000, elicits confirmation for >1000
+# Auto-sizes: downloads ALL comments for ≤1000, prompts for confirmation for >1000
 
 # Optional: Override for large videos without confirmation
 # comments = await download_comments("dQw4w9WgXcQ", confirm_large_operation=True)
@@ -266,13 +275,20 @@ The tools now auto-size intelligently. Just call `download_comments(video_id)` w
 
 **📊 Streamlined Tool Usage with Auto-Sizing:**
 ```python
-# 🌟 SMART ANALYSIS TOOL (NEW!) - START HERE FOR CONTENT ANALYSIS
-# Automatically chooses between contextual analysis vs keyword search
+# 🌟 SMART ANALYSIS TOOL - START HERE FOR CONTENT ANALYSIS
+# Auto-detects whether to use contextual analysis or keyword search
 result = await analyze_comments_for_content(
     video_id="dQw4w9WgXcQ",
-    analysis_request="check for spoilers"  # Works for any analysis request
+    analysis_request="check for spoilers"  # Auto-detects approach needed
 )
-# Returns either full comments for AI analysis or search term suggestions
+# Returns either full comments for AI analysis or keyword search suggestions
+
+# Manual approach override if needed:
+result = await analyze_comments_for_content(
+    video_id="dQw4w9WgXcQ",
+    analysis_request="check for spoilers",
+    approach="contextual"  # Force contextual analysis
+)
 
 # CHANNEL DISCOVERY TOOLS (NEW!)
 # Find channels by name or partial name

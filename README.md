@@ -4,7 +4,7 @@ A Model Context Protocol (MCP) server that provides AI systems with the ability 
 
 ## Features
 
-- **8 specialized tools** for comprehensive comment analysis
+- **10 specialized tools** for comprehensive comment analysis
 - **YouTube Data API** integration for 100% accurate data
 - **Slim Mode** with 87% size reduction for LLM efficiency
 - **Server-side filtering** reduces token usage by 99%+
@@ -33,15 +33,19 @@ Add this configuration block to your MCP client (e.g., Claude Desktop):
 
 ### Comment Analysis Tools
 1. **`get_video_info`** - Get video metadata and total comment count (recommended first step)
-2. **`download_comments`** - Smart comment download with slim mode (87% size reduction)
-3. **`search_comments`** - Server-side filtered search with 99%+ token reduction
-4. **`get_top_comments`** - Server-side popularity sorting with slim format
-5. **`get_comment_stats`** - Statistical analysis with sample comments
-6. **`get_quota_status`** - Monitor API usage and remaining capacity
+2. **`analyze_comments_for_content`** - 🌟 Smart analysis tool with auto-detection of approach
+3. **`download_comments`** - Smart comment download with slim mode (87% size reduction)
+4. **`search_comments`** - Server-side filtered search with 99%+ token reduction
+5. **`get_top_comments`** - Server-side popularity sorting with slim format
+6. **`get_comment_stats`** - Statistical analysis with sample comments
+7. **`get_quota_status`** - Monitor API usage and remaining capacity
 
 ### Channel Discovery Tools  
-7. **`find_channel`** - Search YouTube channels by name or partial name
-8. **`get_channel_videos`** - List channel videos with server-side title filtering
+8. **`find_channel`** - Search YouTube channels by name or partial name
+9. **`get_channel_videos`** - List channel videos with server-side title filtering
+
+### Testing & Debug Tools
+10. **`test_elicitation`** - Test FastMCP elicitation functionality (for debugging)
 
 ## Quick Start
 
