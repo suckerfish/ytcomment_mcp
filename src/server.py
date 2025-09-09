@@ -840,7 +840,8 @@ async def get_quota_status() -> dict:
 @mcp.tool()
 async def analyze_comments_for_content(
     video_id: str,
-    analysis_request: str
+    analysis_request: str,
+    ctx: Context
 ) -> dict:
     """
     Analyze comments for specific content with intelligent approach selection.
@@ -860,8 +861,6 @@ async def analyze_comments_for_content(
         Dictionary with either full comments for contextual analysis or guidance for keyword search
     """
     try:
-        from fastmcp.server.context import get_context
-        ctx = get_context()
         # Get video info first to understand scope
         video_info_request = MetadataRequest(video_id=video_id)
         client = get_api_client()
