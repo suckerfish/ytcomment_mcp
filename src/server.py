@@ -164,7 +164,7 @@ async def health_check() -> dict:
 @mcp.tool()
 async def download_comments(
     video_id: str,
-    limit: int = 1000,
+    limit: int = None,
     sort: int = 1,
     confirm_large_operation: bool = False,
     slim: bool = True
@@ -188,17 +188,18 @@ async def download_comments(
     or "analyze sentiment", consider using analyze_comments_for_content() first - 
     it will help choose the optimal approach automatically.
     
-    Primary comment download tool with automatic size checking and elicitation:
-    - Automatically checks video info first to get total comment count
-    - Requires confirmation for videos with >1000 comments
-    - Provides detailed analysis and smart recommendations
+    Primary comment download tool with intelligent auto-sizing and elicitation:
+    - **Auto-sizes limit**: Downloads ALL comments for videos ≤1000 comments
+    - **Smart elicitation**: Only asks for confirmation when >1000 comments
+    - **No manual limits needed**: Just call without limit parameter for optimal behavior
+    - Provides detailed analysis and smart recommendations  
     - Prevents accidental LLM context overflow
     - 100% accurate YouTube Data API results
     - Slim mode (default) reduces data size by 87% for LLM efficiency
     
     Args:
         video_id: YouTube video ID (e.g., 'dQw4w9WgXcQ')
-        limit: Maximum comments to download (1-10000, default: 1000)
+        limit: Maximum comments to download (1-10000, auto-sized if None)
         sort: Sort order - 0 for popular/relevance, 1 for recent/time (default: 1)
         confirm_large_operation: Confirm downloading from videos with >1000 comments (default: False)
         slim: Return only essential fields for 87% size reduction (default: True)
@@ -207,6 +208,20 @@ async def download_comments(
         Dictionary with comments, warnings, and token analysis
     """
     try:
+        # Auto-size limit based on video comment count if not specified
+        if limit is None:
+            # Get video info to determine appropriate limit
+            client = get_api_client()
+            video_request = MetadataRequest(video_id=video_id)
+            video_metadata = await client.get_video_info(video_request)
+            total_comments = video_metadata.comment_count or 0
+            
+            # Auto-size: use actual comment count for videos ≤1000, cap at reasonable limit for larger videos
+            if total_comments <= 1000:
+                limit = total_comments  # Download all available comments
+            else:
+                limit = 2000  # Reasonable default for larger videos (will trigger elicitation)
+        
         if not 1 <= limit <= 10000:
             raise ToolError("limit must be between 1 and 10000")
         

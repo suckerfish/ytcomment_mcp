@@ -188,17 +188,13 @@ info = await get_video_info("dQw4w9WgXcQ")
 print(f"'{info['title']}' by {info['channel']}")
 print(f"Total comments: {info['statistics']['comment_count']:,}")
 
-# Step 2: Use recommendations for optimal strategy
-if info['statistics']['comment_count'] <= 2000:
-    # Small video - download all comments
-    comments = await download_comments("dQw4w9WgXcQ", limit=info['statistics']['comment_count'])
-elif info['statistics']['comment_count'] <= 5000:
-    # Medium video - download sample or search
-    comments = await download_comments("dQw4w9WgXcQ", limit=3000)
-else:
-    # Large video - use targeted tools
-    top_comments = await get_top_comments("dQw4w9WgXcQ", top_count=50)
-    search_results = await search_comments("dQw4w9WgXcQ", ["amazing", "love"], max_results=25)
+# Step 2: Use optimal strategy (now simplified with auto-sizing!)
+# For ALL video sizes - just call download_comments without limit
+comments = await download_comments("dQw4w9WgXcQ")
+# Auto-sizes: downloads ALL comments for ≤1000, elicits confirmation for >1000
+
+# Optional: Override for large videos without confirmation
+# comments = await download_comments("dQw4w9WgXcQ", confirm_large_operation=True)
 
 # Step 3: Optional - Get detailed stats
 stats = await get_comment_stats("dQw4w9WgXcQ", limit=2000)
