@@ -293,7 +293,7 @@ class AnalysisMode(BaseModel):
         ...,
         description="Analysis approach: full_context for contextual AI analysis, keyword_search for specific terms, let_me_decide for automatic selection"
     )
-    reasoning: Optional[str] = Field(
-        None,
-        description="Optional explanation of why this approach was chosen"
+    reasoning: str = Field(
+        default="",
+        description="Explanation of why this approach was chosen (empty string if not provided)"
     )
