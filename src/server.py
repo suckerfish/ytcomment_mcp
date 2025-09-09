@@ -20,6 +20,15 @@ from src.models.youtube import (
     ChannelSearchRequest, VideoListRequest, AnalysisMode
 )
 
+# Simple model for elicitation testing
+from pydantic import BaseModel, Field
+from typing import Literal
+
+class SimpleChoice(BaseModel):
+    """Simple choice model for elicitation testing."""
+    option: Literal["A", "B", "C"] = Field(..., description="Choose A, B, or C")
+    reason: str = Field(default="", description="Optional reason for your choice")
+
 # Initialize MCP server with stateless HTTP for streamable transport
 mcp = FastMCP("YouTube Comment Downloader", stateless_http=True)
 
@@ -858,7 +867,7 @@ async def get_quota_status() -> dict:
 async def analyze_comments_for_content(
     video_id: str,
     analysis_request: str,
-    ctx: Context
+    approach: str = "auto"
 ) -> dict:
     """
     Analyze comments for specific content with intelligent approach selection.
@@ -866,13 +875,14 @@ async def analyze_comments_for_content(
     This tool helps distinguish between two fundamentally different analysis approaches:
     - **Contextual Analysis**: Download all comments for deep AI understanding (best for spoilers, sentiment, themes, reactions)
     - **Keyword Search**: Find specific terms or phrases (best for mentions, specific topics)
+    - **Auto Selection**: Automatically chooses the best approach based on request analysis
     
-    The tool will elicit the user's preferred approach or intelligently recommend based on the request type.
     Perfect for requests like "check for spoilers", "analyze sentiment", "find toxic comments", etc.
     
     Args:
         video_id: YouTube video ID (e.g., 'dQw4w9WgXcQ')
         analysis_request: Description of what you want to analyze (e.g., "check for spoilers")
+        approach: Analysis approach - "auto" (default), "contextual", or "search"
     
     Returns:
         Dictionary with either full comments for contextual analysis or guidance for keyword search
@@ -884,41 +894,8 @@ async def analyze_comments_for_content(
         video_info = await client.get_video_info(video_info_request)
         comment_count = video_info.comment_count or 0
         
-        # Create contextual elicitation message
-        elicitation_message = f"""You want to "{analysis_request}" in {comment_count:,} comments from:
-📹 **{video_info.title}** by {video_info.channel_title}
-
-**Choose your analysis approach:**
-
-🧠 **Full Context**: Download all comments for deep AI analysis
-   • Best for: spoilers, sentiment, themes, reactions, toxic content
-   • AI reads every comment and understands meaning/context
-   • Tokens used: ~{min(comment_count, 2000) * 6:,} (for up to 2000 comments)
-
-🔍 **Keyword Search**: Search for specific terms/phrases  
-   • Best for: mentions of specific people/things, exact phrases
-   • Much faster, uses fewer tokens
-   • You'll need to specify search terms
-
-🤖 **Let Me Decide**: I'll choose the best approach for your request
-   • Automatic selection based on request type and video size"""
-
-        # Elicit user preference
-        analysis_mode = await ctx.elicit(
-            elicitation_message,
-            response_type=AnalysisMode
-        )
-        
-        if analysis_mode.action != "accept":
-            return {
-                "cancelled": True,
-                "message": "Analysis cancelled by user"
-            }
-        
-        chosen_approach = analysis_mode.data.approach
-        
-        # Auto-decide logic if user chose "let_me_decide"
-        if chosen_approach == "let_me_decide":
+        # Intelligent approach selection
+        if approach == "auto":
             # Heuristics for contextual analysis requests
             contextual_keywords = [
                 "spoiler", "sentiment", "theme", "opinion", "reaction", "feeling", 
@@ -940,16 +917,24 @@ async def analyze_comments_for_content(
             
             if contextual_score > search_score and comment_count <= 2000:
                 chosen_approach = "full_context"
-                auto_reasoning = f"Detected contextual analysis request ('{analysis_request}') with manageable video size ({comment_count:,} comments)"
+                auto_reasoning = f"🤖 Auto-selected contextual analysis: detected analysis request ('{analysis_request}') with manageable video size ({comment_count:,} comments)"
             elif search_score > contextual_score or comment_count > 2000:
                 chosen_approach = "keyword_search"
-                auto_reasoning = f"Detected search-based request or large video ('{analysis_request}', {comment_count:,} comments)"
+                auto_reasoning = f"🤖 Auto-selected keyword search: detected search-based request or large video ('{analysis_request}', {comment_count:,} comments)"
             else:
                 # Default to contextual for ambiguous cases if video is small enough
                 chosen_approach = "full_context" if comment_count <= 1000 else "keyword_search"
-                auto_reasoning = f"Ambiguous request - defaulting to {'contextual' if chosen_approach == 'full_context' else 'search'} approach based on video size"
+                auto_reasoning = f"🤖 Auto-selected {'contextual' if chosen_approach == 'full_context' else 'search'} approach: ambiguous request, decided based on video size ({comment_count:,} comments)"
+        elif approach == "contextual":
+            chosen_approach = "full_context"
+            auto_reasoning = "User explicitly chose contextual analysis approach"
+        elif approach == "search":
+            chosen_approach = "keyword_search"
+            auto_reasoning = "User explicitly chose keyword search approach"
         else:
-            auto_reasoning = analysis_mode.data.reasoning or "User explicitly chose this approach"
+            # Fallback to auto if invalid approach
+            chosen_approach = "full_context" if comment_count <= 1000 else "keyword_search"
+            auto_reasoning = f"Invalid approach '{approach}' - defaulted to {'contextual' if chosen_approach == 'full_context' else 'search'} based on video size"
         
         # Execute the chosen approach
         if chosen_approach == "full_context":
@@ -1238,6 +1223,70 @@ def parse_arguments():
     parser.add_argument('--host', default='127.0.0.1', help='Host to bind to for HTTP transport (default: 127.0.0.1)')
     parser.add_argument('--youtube-api-key', help='YouTube Data API key (optional, can use YOUTUBE_API_KEY env var)')
     return parser.parse_args()
+
+@mcp.tool()
+async def test_elicitation(ctx: Context) -> dict:
+    """
+    Test FastMCP elicitation functionality with Claude Desktop.
+    
+    This is a simple test tool to verify whether elicitation works properly
+    in Claude Desktop. It will prompt you to choose between three options
+    and return your choice.
+    
+    Returns:
+        Dictionary with the result of the elicitation test
+    """
+    try:
+        # Simple elicitation test
+        result = await ctx.elicit(
+            "🧪 **Elicitation Test**\n\n"
+            "Please choose one of the following options:\n\n"
+            "**A)** Option Alpha - First choice\n"
+            "**B)** Option Beta - Second choice  \n"
+            "**C)** Option Charlie - Third choice\n\n"
+            "This tests whether Claude Desktop properly displays elicitation prompts.",
+            response_type=SimpleChoice
+        )
+        
+        if result.action == "accept":
+            return {
+                "elicitation_test": "SUCCESS",
+                "user_choice": result.data.option,
+                "user_reason": result.data.reason or "No reason provided",
+                "message": f"✅ You chose option {result.data.option}! Elicitation is working in Claude Desktop.",
+                "technical_details": {
+                    "elicitation_triggered": True,
+                    "user_response_received": True,
+                    "fastmcp_version": "2.7.0+",
+                    "protocol": "MCP with elicitation support"
+                }
+            }
+        else:
+            return {
+                "elicitation_test": "CANCELLED", 
+                "message": "❌ User cancelled the elicitation prompt",
+                "technical_details": {
+                    "elicitation_triggered": True,
+                    "user_response_received": False,
+                    "action": result.action
+                }
+            }
+            
+    except Exception as e:
+        return {
+            "elicitation_test": "ERROR",
+            "error": str(e),
+            "message": f"❌ Elicitation failed with error: {str(e)}",
+            "technical_details": {
+                "elicitation_triggered": False,
+                "error_type": type(e).__name__,
+                "possible_causes": [
+                    "Claude Desktop doesn't support elicitation",
+                    "FastMCP version incompatibility",
+                    "MCP protocol implementation issue"
+                ]
+            }
+        }
 
 def main():
     """Main entry point for the MCP server."""
