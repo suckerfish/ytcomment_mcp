@@ -188,6 +188,8 @@ async def download_comments(
     or "analyze sentiment", consider using analyze_comments_for_content() first - 
     it will help choose the optimal approach automatically.
     
+    ⚠️ **IMPORTANT: DO NOT SET LIMIT PARAMETER** - Let the tool auto-size for optimal results!
+    
     Primary comment download tool with intelligent auto-sizing and elicitation:
     - **Auto-sizes limit**: Downloads ALL comments for videos ≤1000 comments
     - **Smart elicitation**: Only asks for confirmation when >1000 comments
@@ -199,7 +201,7 @@ async def download_comments(
     
     Args:
         video_id: YouTube video ID (e.g., 'dQw4w9WgXcQ')
-        limit: Maximum comments to download (1-10000, auto-sized if None)
+        limit: **LEAVE AS DEFAULT (None)** for auto-sizing. Only set manually in special cases.
         sort: Sort order - 0 for popular/relevance, 1 for recent/time (default: 1)
         confirm_large_operation: Confirm downloading from videos with >1000 comments (default: False)
         slim: Return only essential fields for 87% size reduction (default: True)

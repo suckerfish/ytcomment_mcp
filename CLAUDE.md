@@ -261,7 +261,10 @@ All comment retrieval tools now provide **accurate token counting** using Claude
 }
 ```
 
-**📊 Streamlined Tool Usage with Slim Mode:**
+**⚠️ CRITICAL: DO NOT SET LIMIT PARAMETERS!**
+The tools now auto-size intelligently. Just call `download_comments(video_id)` without limit!
+
+**📊 Streamlined Tool Usage with Auto-Sizing:**
 ```python
 # 🌟 SMART ANALYSIS TOOL (NEW!) - START HERE FOR CONTENT ANALYSIS
 # Automatically chooses between contextual analysis vs keyword search
@@ -292,20 +295,19 @@ video_info = await get_video_info(video_id="dQw4w9WgXcQ")
 print(f"Video has {video_info['statistics']['comment_count']:,} comments")
 # Provides recommendations for optimal download strategy
 
-# STEP 2: Smart download with 87% size reduction (slim mode default)
+# STEP 2: Smart download with auto-sizing (RECOMMENDED - no limit needed!)
 result = await download_comments(
-    video_id="dQw4w9WgXcQ",
-    limit=100,  # Warns if >2000
-    sort=1,     # 1=recent, 0=popular
-    slim=True,  # Default - only essential fields (author, text, likes, time, is_hearted)
-    force_large_ingestion=False  # Override warnings
+    video_id="dQw4w9WgXcQ"
+    # NO limit parameter - auto-sizes perfectly!
+    # sort=1,     # 1=recent, 0=popular (default)
+    # slim=True,  # Default - only essential fields (author, text, likes, time, is_hearted)
 )
 
 # Full metadata when needed
 full_result = await download_comments(
     video_id="dQw4w9WgXcQ",
-    limit=50,
     slim=False  # All fields: cid, channel, photo, replies, reply, time_parsed, etc.
+    # Still no limit - let it auto-size!
 )
 
 # Server-side filtered search with slim format (99% + 87% reduction)
