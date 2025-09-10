@@ -98,29 +98,24 @@ The project follows Docker best practices for optimal build performance:
 
 ### Available MCP Tools - Streamlined & LLM-Optimized
 
-**✅ 10 CORE TOOLS (100% Reliable via YouTube Data API):**
+**✅ 8 CORE TOOLS (100% Reliable via YouTube Data API):**
 
 **📊 Comment Analysis Tools:**
 1. **`get_video_info`** - Lightweight video metadata with total comment count (RECOMMENDED FIRST STEP)
-2. **`analyze_comments_for_content`** - **🌟 SMART ANALYSIS TOOL** - Auto-detects contextual vs keyword analysis
-3. **`download_comments`** - Smart comment download with 87% size reduction (slim mode default)
-4. **`search_comments`** - Server-side filtered search with 99%+ token reduction + slim format
-5. **`get_top_comments`** - Server-side popularity sorting + 87% size reduction (slim mode default)
-6. **`get_comment_stats`** - Statistical analysis with slim sample comments (87% smaller)
-7. **`get_quota_status`** - Monitor API usage and remaining capacity
+2. **`download_comments`** - Download ALL comments with 87% size reduction (slim mode default)
+3. **`search_comments`** - Server-side filtered search with 99%+ token reduction + slim format
+4. **`get_top_comments`** - Server-side popularity sorting + 87% size reduction (slim mode default)
+5. **`get_comment_stats`** - Statistical analysis with slim sample comments (87% smaller)
+6. **`get_quota_status`** - Monitor API usage and remaining capacity
 
 **🔍 Channel Discovery Tools:**
-8. **`find_channel`** - Search YouTube channels by name/partial name
-9. **`get_channel_videos`** - List channel videos with server-side title filtering
-
-**🧪 Testing Tools:**
-10. **`test_elicitation`** - Test FastMCP elicitation functionality (for debugging)
+7. **`find_channel`** - Search YouTube channels by name/partial name
+8. **`get_channel_videos`** - List channel videos with server-side title filtering
 
 **🚀 Key Features:**
-- **🌟 Smart Analysis Selection** - Auto-detects whether to use contextual analysis or keyword search
+- **Download ALL Comments** - No artificial limits, get complete datasets by default
 - **Slim Mode (Default)** - 87% size reduction with only essential comment fields
 - **Server-side filtering** reduces token usage by 99%+ for LLM efficiency
-- **Smart warning system** prevents accidental context overflow (>2000 comments)
 - **Advanced popularity sorting** finds viral comments with 1M+ likes
 - **Multiple search terms** with OR logic and case sensitivity options
 - **Accurate Token Counting** - Claude tokenization patterns as baseline with detailed breakdown
@@ -128,41 +123,16 @@ The project follows Docker best practices for optimal build performance:
 - **Format flexibility** - slim=True (default) or slim=False for full metadata
 - **Channel Discovery Workflow** - Complete pipeline from channel name to comment analysis
 - **Title filtering** - Server-side video filtering by title keywords for targeted analysis
+- **Simple & Predictable** - No confirmation prompts or artificial barriers
 
 ### Enhanced Workflows
 
-**🌟 SMART ANALYSIS WORKFLOW:**
-```python
-# Auto-detects the best approach - perfect for ambiguous requests
-result = await analyze_comments_for_content(
-    video_id="dQw4w9WgXcQ",
-    analysis_request="check for spoilers"  # Auto-detects: contextual analysis needed
-)
-
-# Tool automatically chooses:
-# 🤖 For "spoilers", "sentiment", "toxic": → Contextual analysis (downloads comments)
-# 🔍 For "mentions", "find", "specific": → Keyword search (suggests search terms)
-# 📊 For large videos (>2000 comments): → Keyword search for efficiency
-
-# Manual override options:
-result = await analyze_comments_for_content(
-    video_id="dQw4w9WgXcQ", 
-    analysis_request="check for spoilers",
-    approach="contextual"  # Force contextual analysis
-)
-
-result = await analyze_comments_for_content(
-    video_id="dQw4w9WgXcQ",
-    analysis_request="check for spoilers", 
-    approach="search"  # Force keyword search suggestions
-)
-```
-
 **📊 WHEN TO USE EACH TOOL:**
-- `analyze_comments_for_content()` - **START HERE** for any content analysis request
-- `download_comments()` - When you're certain you want full contextual analysis
+- `download_comments()` - **START HERE** for contextual analysis (sentiment, themes, spoilers, overall reactions)
 - `search_comments()` - When you know specific keywords/phrases to search for
-- `get_video_info()` - Always good first step to understand video scope
+- `get_top_comments()` - For viral/most-liked comments analysis
+- `get_comment_stats()` - For quantitative metrics and sample overview
+- `get_video_info()` - Good first step to understand video scope and comment count
 
 **🔍 CHANNEL DISCOVERY WORKFLOW (NEW!):**
 ```python
@@ -270,24 +240,15 @@ All comment retrieval tools now provide **accurate token counting** using Claude
 }
 ```
 
-**⚠️ CRITICAL: DO NOT SET LIMIT PARAMETERS!**
-The tools now auto-size intelligently. Just call `download_comments(video_id)` without limit!
-
-**📊 Streamlined Tool Usage with Auto-Sizing:**
+**📊 Streamlined Tool Usage:**
 ```python
-# 🌟 SMART ANALYSIS TOOL - START HERE FOR CONTENT ANALYSIS
-# Auto-detects whether to use contextual analysis or keyword search
-result = await analyze_comments_for_content(
-    video_id="dQw4w9WgXcQ",
-    analysis_request="check for spoilers"  # Auto-detects approach needed
-)
-# Returns either full comments for AI analysis or keyword search suggestions
-
-# Manual approach override if needed:
-result = await analyze_comments_for_content(
-    video_id="dQw4w9WgXcQ",
-    analysis_request="check for spoilers",
-    approach="contextual"  # Force contextual analysis
+# PRIMARY COMMENT ANALYSIS - DOWNLOAD ALL COMMENTS
+# Downloads ALL available comments by default in slim format
+result = await download_comments(
+    video_id="dQw4w9WgXcQ"
+    # No limit needed - gets all comments automatically!
+    # sort=1,     # 1=recent, 0=popular (default: 1)
+    # slim=True,  # Default - only essential fields (author, text, likes, time, is_hearted)
 )
 
 # CHANNEL DISCOVERY TOOLS (NEW!)
@@ -311,10 +272,10 @@ video_info = await get_video_info(video_id="dQw4w9WgXcQ")
 print(f"Video has {video_info['statistics']['comment_count']:,} comments")
 # Provides recommendations for optimal download strategy
 
-# STEP 2: Smart download with auto-sizing (RECOMMENDED - no limit needed!)
+# STEP 2: Download ALL comments (RECOMMENDED)
 result = await download_comments(
     video_id="dQw4w9WgXcQ"
-    # NO limit parameter - auto-sizes perfectly!
+    # Downloads ALL available comments automatically!
     # sort=1,     # 1=recent, 0=popular (default)
     # slim=True,  # Default - only essential fields (author, text, likes, time, is_hearted)
 )
@@ -323,7 +284,7 @@ result = await download_comments(
 full_result = await download_comments(
     video_id="dQw4w9WgXcQ",
     slim=False  # All fields: cid, channel, photo, replies, reply, time_parsed, etc.
-    # Still no limit - let it auto-size!
+    # Downloads all available comments
 )
 
 # Server-side filtered search with slim format (99% + 87% reduction)
@@ -349,7 +310,7 @@ top_comments = await get_top_comments(
 # Statistical analysis with slim sample comments
 stats = await get_comment_stats(
     video_id="dQw4w9WgXcQ", 
-    limit=2000,  # Default limit updated to 2000
+    limit=2000,  # Analyze up to 2000 comments for stats
     slim=True  # Default - sample comments use essential fields only
 )
 

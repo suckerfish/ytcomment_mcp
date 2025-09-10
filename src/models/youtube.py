@@ -286,14 +286,3 @@ class VideoListResponse(BaseModel):
     videos: List[VideoInfo] = Field(..., description="List of matching videos")
     quota_used: int = Field(..., description="API quota units used")
 
-class AnalysisMode(BaseModel):
-    """Model for analysis approach selection via elicitation."""
-    
-    approach: Literal["full_context", "keyword_search", "let_me_decide"] = Field(
-        ...,
-        description="Analysis approach: full_context for contextual AI analysis, keyword_search for specific terms, let_me_decide for automatic selection"
-    )
-    reasoning: str = Field(
-        default="",
-        description="Explanation of why this approach was chosen (empty string if not provided)"
-    )
