@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a YouTube Comment Downloader MCP server that allows AI systems to download and analyze YouTube video comments using the official YouTube Data API. Built with FastMCP, it provides intelligent comment analysis, server-side search filtering, engagement insights, and **accurate token counting** optimized for LLM ingestion.
+This is a YouTube Comment Downloader MCP server that allows AI systems to download and analyze YouTube video comments using the official YouTube Data API. Built with FastMCP 2.14.5, it provides intelligent comment analysis, server-side search filtering, engagement insights, and **accurate token counting** optimized for LLM ingestion.
 
 The server uses the YouTube Data API v3 for 100% accurate comment data with server-side filtering to minimize token usage and optimize LLM context efficiency. All tools automatically provide precise token counts using Claude's tokenization patterns.
 
@@ -73,11 +73,11 @@ uv add <package_name>
 ### Docker Deployment
 
 ```bash
-# Build and run with Docker Compose
-docker-compose up -d --build
+# Pull and run from GHCR (no local build needed)
+docker compose up -d
 
-# Or just run if already built
-docker-compose up -d
+# Image is ghcr.io/suckerfish/ytcomment_mcp:latest
+# Built automatically by GitHub Actions on push to main
 ```
 
 ### Docker Optimization Features
@@ -98,19 +98,29 @@ The project follows Docker best practices for optimal build performance:
 
 ### Available MCP Tools - Streamlined & LLM-Optimized
 
-**✅ 8 CORE TOOLS (100% Reliable via YouTube Data API):**
+**✅ 9 TOOLS (100% Reliable via YouTube Data API):**
 
-**📊 Comment Analysis Tools:**
+All tools have `tags={"read"}` and `ToolAnnotations(readOnlyHint=True, destructiveHint=False)`.
+All tools accept `ctx: Context = None` for logging/progress (with `_NullContext` fallback for MetaMCP).
+
+**📊 Comment Analysis Tools (tag: `read`):**
 1. **`get_video_info`** - Lightweight video metadata with total comment count (RECOMMENDED FIRST STEP)
-2. **`download_comments`** - Download ALL comments with 87% size reduction (slim mode default)
+2. **`download_comments`** - Download ALL comments with 87% size reduction, progress reporting via `ctx.report_progress()`
 3. **`search_comments`** - Server-side filtered search with 99%+ token reduction + slim format
 4. **`get_top_comments`** - Server-side popularity sorting + 87% size reduction (slim mode default)
 5. **`get_comment_stats`** - Statistical analysis with slim sample comments (87% smaller)
-6. **`get_quota_status`** - Monitor API usage and remaining capacity
 
-**🔍 Channel Discovery Tools:**
-7. **`find_channel`** - Search YouTube channels by name/partial name
-8. **`get_channel_videos`** - List channel videos with server-side title filtering
+**🔍 Channel Discovery Tools (tag: `read`):**
+6. **`find_channel`** - Search YouTube channels by name/partial name
+7. **`get_channel_videos`** - List channel videos with server-side title filtering
+
+**🔧 System Tools (tags: `read` + `system`):**
+8. **`health_check`** - Server status and API configuration check
+9. **`get_quota_status`** - Monitor API usage and remaining capacity
+
+**📦 Resource:** `youtube://quota` - Current quota usage as readable MCP resource
+
+**📋 Prompt Templates:** `analyze_video_comments`, `find_channel_comments`, `compare_video_sentiment`, `viral_comments_analysis`
 
 **🚀 Key Features:**
 - **Download ALL Comments** - No artificial limits, get complete datasets by default
@@ -170,10 +180,7 @@ print(f"Total comments: {info['statistics']['comment_count']:,}")
 # Step 2: Use optimal strategy (now simplified with auto-sizing!)
 # For ALL video sizes - just call download_comments without limit
 comments = await download_comments("dQw4w9WgXcQ")
-# Auto-sizes: downloads ALL comments for ≤1000, prompts for confirmation for >1000
-
-# Optional: Override for large videos without confirmation
-# comments = await download_comments("dQw4w9WgXcQ", confirm_large_operation=True)
+# Downloads ALL available comments automatically
 
 # Step 3: Optional - Get detailed stats
 stats = await get_comment_stats("dQw4w9WgXcQ", limit=2000)
@@ -431,13 +438,13 @@ async def authenticated_tool(param: str, ctx: Context) -> dict:
 
 ```
 src/
-├── server.py                   # Streamlined MCP server with 8 LLM-optimized tools + token counting
+├── server.py                   # MCP server: 9 tools, 1 resource, 4 prompts, Context + progress
 ├── tools/
-│   ├── youtube_comments.py     # Stats calculation utilities  
+│   ├── youtube_comments.py     # Stats calculation (calculate_stats only, download code removed)
 │   ├── youtube_api.py          # YouTube Data API client with channel search & video listing
-│   └── token_counter.py        # Claude tokenization pattern-based token counting (NEW!)
+│   └── token_counter.py        # Claude tokenization pattern-based token counting
 ├── models/
-│   └── youtube.py              # Pydantic models for validation (includes channel/video models)
+│   └── youtube.py              # Pydantic v2 models (@field_validator) for validation
 └── __init__.py
 
 # Test files - organized in tests/ directory
@@ -457,7 +464,7 @@ tests/
 
 ## Essential Dependencies
 
-- `fastmcp>=0.2.0` - MCP server framework
+- `fastmcp>=2.14.5,<3.0.0` - MCP server framework (v2 with tool tags, Context, resources, prompts)
 - `google-api-python-client>=2.178.0` - YouTube Data API client
 - `google-auth>=2.40.3` - Google API authentication
 - `python-dotenv>=1.1.0` - Environment variable loading
@@ -478,26 +485,26 @@ For detailed implementation guidance, see:
 
 ## Key Implementation Notes
 
-### ✅ Streamlined YouTube Data API Implementation
-- **Slim Mode (Default)**: 87% size reduction with essential fields only (author, text, likes, time, is_hearted)
-- **Data Accuracy**: 100% accurate like counts and engagement metrics
-- **LLM Optimization**: Server-side filtering reduces token usage by 99%+, slim mode adds another 87% reduction
-- **Smart Warnings**: Prevents accidental LLM context overflow (>2000 comments)
-- **Advanced Search**: Multiple terms, OR logic, case sensitivity options
-- **Viral Detection**: Finds actual viral comments (1M+ likes)
-- **Performance**: ~30-60 seconds per 1,000 comments with reliable results
+### ✅ YouTube Data API Implementation (FastMCP 2.14.5)
+- **9 Tools + 1 Resource + 4 Prompts**: Complete MCP server with tool tags and annotations
+- **Tool Tags**: All tools tagged `{"read"}`, health_check + get_quota_status also `{"system"}`
+- **ToolAnnotations**: All tools have `readOnlyHint=True, destructiveHint=False`
+- **Context Logging**: All tools use `ctx.info()` / `ctx.warning()` (async) instead of Python logging
+- **Progress Reporting**: `download_comments` uses `ctx.report_progress()` for paginated fetches
+- **Session State**: Quota tracking via `ctx.get_state()` / `ctx.set_state()` (**sync, not async**)
+- **MetaMCP Compatible**: `_NullContext` shim handles missing Context injection from proxies
+- **Slim Mode (Default)**: 87% size reduction with essential fields only
+- **Server-side filtering**: Reduces token usage by 99%+ for LLM efficiency
 - **Quota Management**: 10,000 units/day, 1 unit per 100 comments
-- **Error Handling**: Comprehensive API error handling with specific user guidance
-- **Clean Architecture**: 8 streamlined tools, zero redundancy, intuitive naming
-- **Format Flexibility**: Toggle between slim (default) and full metadata modes
+- **Clean Architecture**: Zero redundancy, intuitive naming
 - **Channel Discovery**: Complete workflow from channel name to targeted comment analysis
-- **Server-side Title Filtering**: Efficient video filtering by title keywords before comment analysis
 
 ### Transport Configuration
 - **Local Development**: Uses `stdio` transport by default
-- **Remote/VPS Deployment**: Uses `streamable-http` with `stateless_http=True`
-- **Production Servers**: Always configure with `stateless_http=True` for reliability
-- **Current Status**: ✅ VPS deployment working with streamable HTTP transport
+- **Remote/VPS Deployment**: Uses `streamable-http` with `stateless_http=True` passed to `mcp.run()`
+- **IMPORTANT**: `stateless_http` goes in `mcp.run()`, NOT in `FastMCP()` constructor (deprecated in 2.14.5)
+- **Docker Deployment**: GHCR image `ghcr.io/suckerfish/ytcomment_mcp:latest` (multi-arch amd64/arm64)
+- **Current Status**: ✅ Deployed on Komodo via GHCR, accessible via Tailscale
 
 ### Reply Structure
 - Comments downloaded in **flat structure** (not hierarchical)
@@ -629,14 +636,15 @@ async def my_tool():
 }
 ```
 
-## VPS Deployment Status
+## Deployment Status
 
 ### ✅ Current Deployment Configuration
-The server is successfully deployed on VPS with:
+The server is deployed via Komodo on Ampere (OCI) with:
+- **Image**: `ghcr.io/suckerfish/ytcomment_mcp:latest` (pulled from GHCR)
 - **Transport**: Streamable HTTP with `stateless_http=True`
 - **Network**: Accessible via Tailscale
-- **Service**: SystemD service configured and running
-- **Status**: All transport issues resolved
+- **CI/CD**: GitHub Actions builds and pushes to GHCR on every push to main
+- **Status**: All tools operational, MetaMCP proxy compatible
 
 ### Quick VPS Commands
 ```bash

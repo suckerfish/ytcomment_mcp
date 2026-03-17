@@ -24,8 +24,8 @@ This guide covers deploying FastMCP servers to production environments, from sim
 import os
 from fastmcp import FastMCP
 
-# Initialize with stateless HTTP for reliable remote deployment
-mcp = FastMCP("Development Server", stateless_http=True)
+# Initialize server (stateless_http is set in mcp.run(), not here)
+mcp = FastMCP("Development Server")
 
 @mcp.tool()
 def example_tool() -> str:
@@ -39,7 +39,7 @@ if __name__ == "__main__":
     
     if transport == "http":
         # Use streamable HTTP with stateless mode for remote access
-        mcp.run(transport="streamable-http", host="0.0.0.0", port=port)
+        mcp.run(transport="streamable-http", stateless_http=True, host="0.0.0.0", port=port)
     else:
         mcp.run()  # Default STDIO for local testing
 ```
@@ -122,7 +122,7 @@ logging.basicConfig(
 mcp = FastMCP(
     name="Production MCP Server",
     version="1.0.0",
-    stateless_http=True  # Required for reliable production deployment
+    # Note: stateless_http is passed to mcp.run(), not here
 )
 
 # Add health check endpoint
@@ -141,6 +141,7 @@ if __name__ == "__main__":
     port = int(os.getenv("PORT", "8000"))
     mcp.run(
         transport="streamable-http",
+        stateless_http=True,
         host="0.0.0.0",
         port=port
     )
@@ -737,11 +738,12 @@ async def health_check(request):
 This is the most common issue with streamable HTTP transport. Always use `stateless_http=True` for remote deployments:
 
 ```python
-# WRONG - will cause errors in remote deployments
-mcp = FastMCP("Server Name")
-
-# CORRECT - reliable for all deployment scenarios  
+# WRONG - stateless_http in constructor is deprecated in FastMCP 2.14.5
 mcp = FastMCP("Server Name", stateless_http=True)
+
+# CORRECT - pass stateless_http to mcp.run()
+mcp = FastMCP("Server Name")
+mcp.run(transport="streamable-http", stateless_http=True, host="0.0.0.0", port=8000)
 ```
 
 **SSE 404 Errors:**

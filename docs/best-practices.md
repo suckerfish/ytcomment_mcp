@@ -222,7 +222,7 @@ async def fetch_external_data(url: str, timeout: int = 30) -> Dict[str, Any]:
 
 ```python
 # src/models/requests.py
-from pydantic import BaseModel, Field, validator, root_validator
+from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional, Union, Literal
 from datetime import datetime
 from enum import Enum
@@ -242,13 +242,15 @@ class TaskRequest(BaseModel):
     tags: List[str] = Field(default_factory=list, max_items=10, description="Task tags")
     assignee: Optional[str] = Field(None, regex=r'^[a-zA-Z0-9_]+$', description="Username")
     
-    @validator('due_date')
+    @field_validator('due_date')
+    @classmethod
     def due_date_must_be_future(cls, v):
         if v and v <= datetime.now():
             raise ValueError('Due date must be in the future')
         return v
-    
-    @validator('tags')
+
+    @field_validator('tags')
+    @classmethod
     def validate_tags(cls, v):
         if v:
             # Remove duplicates and validate format

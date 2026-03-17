@@ -223,8 +223,8 @@ uv pip install -e .
 import argparse
 from fastmcp import FastMCP
 
-# Initialize with stateless HTTP for remote deployment
-mcp = FastMCP("Your MCP Server", stateless_http=True)
+# Initialize server (stateless_http goes in mcp.run(), not constructor)
+mcp = FastMCP("Your MCP Server")
 
 # Your tools here...
 
@@ -359,11 +359,13 @@ curl -v http://localhost:8080/mcp   # Should get 307 redirect to /mcp/
 
 **1. Update FastMCP initialization:**
 ```python
-# BEFORE  
+# BEFORE
 mcp = FastMCP("Server Name")
+mcp.run(transport="streamable-http", host="0.0.0.0", port=8080)
 
-# AFTER
-mcp = FastMCP("Server Name", stateless_http=True)
+# AFTER (stateless_http goes in mcp.run(), not constructor)
+mcp = FastMCP("Server Name")
+mcp.run(transport="streamable-http", stateless_http=True, host="0.0.0.0", port=8080)
 ```
 
 **2. No service changes needed** - the `stateless_http` parameter is set in code.
