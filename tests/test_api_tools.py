@@ -8,9 +8,9 @@ import sys
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# Set API key
-API_KEY = "***REDACTED_API_KEY***"
-os.environ['YOUTUBE_API_KEY'] = API_KEY
+API_KEY = os.getenv('YOUTUBE_API_KEY')
+if not API_KEY:
+    raise RuntimeError("Set YOUTUBE_API_KEY environment variable before running tests")
 
 # Import the MCP server and tools
 from src.server import (

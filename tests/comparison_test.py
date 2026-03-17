@@ -6,9 +6,9 @@ import os
 import subprocess
 import json
 
-# Set API key
-API_KEY = "***REDACTED_API_KEY***"
-os.environ['YOUTUBE_API_KEY'] = API_KEY
+API_KEY = os.getenv('YOUTUBE_API_KEY')
+if not API_KEY:
+    raise RuntimeError("Set YOUTUBE_API_KEY environment variable before running tests")
 
 def test_scraper():
     """Test the old scraper-based tool."""

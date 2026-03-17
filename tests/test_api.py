@@ -6,8 +6,9 @@ import os
 from src.tools.youtube_api import YouTubeAPIClient
 from src.models.youtube import CommentRequest
 
-# Set API key from TODO file
-API_KEY = "***REDACTED_API_KEY***"
+API_KEY = os.getenv('YOUTUBE_API_KEY')
+if not API_KEY:
+    raise RuntimeError("Set YOUTUBE_API_KEY environment variable before running tests")
 
 async def test_api_basic():
     """Test basic API functionality."""
