@@ -834,7 +834,8 @@ async def get_video_info(video_id: str, ctx: Context = None) -> dict:
     except Exception as e:
         if isinstance(e, ToolError):
             raise
-        raise ToolError(f"Failed to get video info: {str(e)}")
+        import traceback
+        raise ToolError(f"Failed to get video info: {str(e)}\n{traceback.format_exc()}")
 
 @mcp.tool(tags={"read", "system"}, annotations=READ_ONLY)
 async def get_quota_status(ctx: Context = None) -> dict:
