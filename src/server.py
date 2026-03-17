@@ -47,8 +47,8 @@ class _NullContext:
     async def info(self, msg): pass
     async def warning(self, msg): pass
     async def report_progress(self, progress, total=None, message=None): pass
-    async def get_state(self, key): return None
-    async def set_state(self, key, value): pass
+    def get_state(self, key): return None
+    def set_state(self, key, value): pass
 
 
 def _ctx(ctx):
@@ -83,9 +83,9 @@ async def get_quota_from_state(ctx) -> dict:
     """Read quota tracking from session state, resetting if 24h elapsed."""
     c = _ctx(ctx)
     try:
-        daily_usage = await c.get_state(QUOTA_DAILY_USAGE) or 0
-        requests_made = await c.get_state(QUOTA_REQUESTS_MADE) or 0
-        last_reset = await c.get_state(QUOTA_LAST_RESET) or time.time()
+        daily_usage = c.get_state(QUOTA_DAILY_USAGE) or 0
+        requests_made = c.get_state(QUOTA_REQUESTS_MADE) or 0
+        last_reset = c.get_state(QUOTA_LAST_RESET) or time.time()
     except Exception:
         daily_usage = 0
         requests_made = 0
@@ -96,9 +96,9 @@ async def get_quota_from_state(ctx) -> dict:
         daily_usage = 0
         requests_made = 0
         last_reset = time.time()
-        await c.set_state(QUOTA_DAILY_USAGE, 0)
-        await c.set_state(QUOTA_REQUESTS_MADE, 0)
-        await c.set_state(QUOTA_LAST_RESET, last_reset)
+        c.set_state(QUOTA_DAILY_USAGE, 0)
+        c.set_state(QUOTA_REQUESTS_MADE, 0)
+        c.set_state(QUOTA_LAST_RESET, last_reset)
 
     return {
         "daily_usage": daily_usage,
@@ -123,8 +123,8 @@ async def record_quota_usage(ctx, cost: int = 1):
             f"Used: {new_usage}/{QUOTA_DAILY_LIMIT}."
         )
 
-    await c.set_state(QUOTA_DAILY_USAGE, new_usage)
-    await c.set_state(QUOTA_REQUESTS_MADE, new_requests)
+    c.set_state(QUOTA_DAILY_USAGE, new_usage)
+    c.set_state(QUOTA_REQUESTS_MADE, new_requests)
     await c.info(f"API quota used: {cost} (total today: {new_usage}/{QUOTA_DAILY_LIMIT})")
 
 
@@ -834,8 +834,7 @@ async def get_video_info(video_id: str, ctx: Context = None) -> dict:
     except Exception as e:
         if isinstance(e, ToolError):
             raise
-        import traceback
-        raise ToolError(f"Failed to get video info: {str(e)}\n{traceback.format_exc()}")
+        raise ToolError(f"Failed to get video info: {str(e)}")
 
 @mcp.tool(tags={"read", "system"}, annotations=READ_ONLY)
 async def get_quota_status(ctx: Context = None) -> dict:
