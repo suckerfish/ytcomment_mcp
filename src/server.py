@@ -42,6 +42,20 @@ QUOTA_LAST_RESET = "quota_last_reset"
 QUOTA_DAILY_LIMIT = 10000
 
 
+class _NullContext:
+    """No-op stand-in when Context is not injected (e.g. MetaMCP proxy)."""
+    async def info(self, msg): pass
+    async def warning(self, msg): pass
+    async def report_progress(self, progress, total=None, message=None): pass
+    async def get_state(self, key): return None
+    async def set_state(self, key, value): pass
+
+
+def _ctx(ctx):
+    """Return ctx if available, otherwise a safe no-op."""
+    return ctx if ctx is not None else _NullContext()
+
+
 def get_api_client() -> YouTubeAPIClient:
     """Get or create API client with proper error handling."""
     global api_client, _runtime_api_key
@@ -65,12 +79,13 @@ def get_api_client() -> YouTubeAPIClient:
     return api_client
 
 
-async def get_quota_from_state(ctx: Context) -> dict:
+async def get_quota_from_state(ctx) -> dict:
     """Read quota tracking from session state, resetting if 24h elapsed."""
+    c = _ctx(ctx)
     try:
-        daily_usage = await ctx.get_state(QUOTA_DAILY_USAGE) or 0
-        requests_made = await ctx.get_state(QUOTA_REQUESTS_MADE) or 0
-        last_reset = await ctx.get_state(QUOTA_LAST_RESET) or time.time()
+        daily_usage = await c.get_state(QUOTA_DAILY_USAGE) or 0
+        requests_made = await c.get_state(QUOTA_REQUESTS_MADE) or 0
+        last_reset = await c.get_state(QUOTA_LAST_RESET) or time.time()
     except Exception:
         daily_usage = 0
         requests_made = 0
@@ -81,9 +96,9 @@ async def get_quota_from_state(ctx: Context) -> dict:
         daily_usage = 0
         requests_made = 0
         last_reset = time.time()
-        await ctx.set_state(QUOTA_DAILY_USAGE, 0)
-        await ctx.set_state(QUOTA_REQUESTS_MADE, 0)
-        await ctx.set_state(QUOTA_LAST_RESET, last_reset)
+        await c.set_state(QUOTA_DAILY_USAGE, 0)
+        await c.set_state(QUOTA_REQUESTS_MADE, 0)
+        await c.set_state(QUOTA_LAST_RESET, last_reset)
 
     return {
         "daily_usage": daily_usage,
@@ -95,21 +110,22 @@ async def get_quota_from_state(ctx: Context) -> dict:
     }
 
 
-async def record_quota_usage(ctx: Context, cost: int = 1):
+async def record_quota_usage(ctx, cost: int = 1):
     """Record API quota usage in session state."""
+    c = _ctx(ctx)
     quota = await get_quota_from_state(ctx)
     new_usage = quota["daily_usage"] + cost
     new_requests = quota["requests_made"] + 1
 
     if new_usage > QUOTA_DAILY_LIMIT:
-        await ctx.warning(
+        await c.warning(
             f"YouTube API daily quota limit exceeded. "
             f"Used: {new_usage}/{QUOTA_DAILY_LIMIT}."
         )
 
-    await ctx.set_state(QUOTA_DAILY_USAGE, new_usage)
-    await ctx.set_state(QUOTA_REQUESTS_MADE, new_requests)
-    await ctx.info(f"API quota used: {cost} (total today: {new_usage}/{QUOTA_DAILY_LIMIT})")
+    await c.set_state(QUOTA_DAILY_USAGE, new_usage)
+    await c.set_state(QUOTA_REQUESTS_MADE, new_requests)
+    await c.info(f"API quota used: {cost} (total today: {new_usage}/{QUOTA_DAILY_LIMIT})")
 
 
 def format_iso_duration(duration: str | None) -> str | None:
@@ -138,13 +154,14 @@ SYSTEM_ANNOTATIONS = ToolAnnotations(readOnlyHint=True, destructiveHint=False)
 
 
 @mcp.tool(tags={"system", "read"}, annotations=SYSTEM_ANNOTATIONS)
-async def health_check(ctx: Context) -> dict:
+async def health_check(ctx: Context = None) -> dict:
     """
     Health check endpoint for Docker deployments.
 
     Returns server status and basic configuration info.
     """
     try:
+        ctx = _ctx(ctx)
         client = get_api_client()
         quota = await get_quota_from_state(ctx)
         await ctx.info("Health check performed")
@@ -203,6 +220,7 @@ async def download_comments(
         Dictionary with all comments, token analysis, and metadata
     """
     try:
+        ctx = _ctx(ctx)
         client = get_api_client()
 
         # Fetch video info once — used for auto-sizing and for the response
@@ -370,6 +388,7 @@ async def get_comment_stats(
         Dictionary with accurate statistics and sample comments
     """
     try:
+        ctx = _ctx(ctx)
         if not 1 <= limit <= 10000:
             raise ToolError("limit must be between 1 and 10000")
 
@@ -488,6 +507,7 @@ async def search_comments(
         Dictionary with only matching comments and efficiency metrics
     """
     try:
+        ctx = _ctx(ctx)
         if not isinstance(search_terms, list) or not search_terms:
             raise ToolError("search_terms must be a non-empty list of strings")
 
@@ -629,6 +649,7 @@ async def get_top_comments(
         Dictionary with only the highest-voted comments and efficiency metrics
     """
     try:
+        ctx = _ctx(ctx)
         if not 1 <= top_count <= 100:
             raise ToolError("top_count must be between 1 and 100")
 
@@ -755,6 +776,7 @@ async def get_video_info(video_id: str, ctx: Context = None) -> dict:
         Dictionary with video metadata including comment count, title, stats
     """
     try:
+        ctx = _ctx(ctx)
         client = get_api_client()
         request = MetadataRequest(video_id=video_id)
 
@@ -828,6 +850,7 @@ async def get_quota_status(ctx: Context = None) -> dict:
         Dictionary with session tracking, quota limits, and usage guidance
     """
     try:
+        ctx = _ctx(ctx)
         quota = await get_quota_from_state(ctx)
         status = QuotaStatus(**quota)
 
@@ -896,6 +919,7 @@ async def find_channel(
         Dictionary with matching channels and their metadata
     """
     try:
+        ctx = _ctx(ctx)
         if not isinstance(channel_name, str) or not channel_name.strip():
             raise ToolError("channel_name must be a non-empty string")
 
@@ -984,6 +1008,7 @@ async def get_channel_videos(
         Dictionary with filtered videos and their metadata
     """
     try:
+        ctx = _ctx(ctx)
         if not isinstance(channel_id, str) or not channel_id.strip():
             raise ToolError("channel_id must be a non-empty string")
 
