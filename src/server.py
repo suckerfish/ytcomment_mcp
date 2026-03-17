@@ -2,6 +2,7 @@
 """YouTube Comment Downloader MCP Server."""
 
 import argparse
+import re
 from fastmcp import FastMCP, Context
 from fastmcp.exceptions import ToolError
 from mcp.types import ToolAnnotations
@@ -111,6 +112,24 @@ async def record_quota_usage(ctx: Context, cost: int = 1):
     await ctx.info(f"API quota used: {cost} (total today: {new_usage}/{QUOTA_DAILY_LIMIT})")
 
 
+def format_iso_duration(duration: str | None) -> str | None:
+    """Convert ISO 8601 duration (e.g. 'PT1H2M3S') to human-readable ('1h 2m 3s')."""
+    if not duration or not duration.startswith('PT'):
+        return duration
+    match = re.match(r'PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?', duration)
+    if not match:
+        return duration
+    hours, minutes, seconds = match.groups()
+    parts = []
+    if hours:
+        parts.append(f"{hours}h")
+    if minutes:
+        parts.append(f"{minutes}m")
+    if seconds:
+        parts.append(f"{seconds}s")
+    return " ".join(parts) if parts else "0s"
+
+
 # ---------------------------------------------------------------------------
 # Tool annotations (read-only for all data tools, system for health_check)
 # ---------------------------------------------------------------------------
@@ -186,15 +205,17 @@ async def download_comments(
     try:
         client = get_api_client()
 
+        # Fetch video info once — used for auto-sizing and for the response
+        await ctx.info(f"Fetching video info for {video_id}")
+        video_request = MetadataRequest(video_id=video_id)
+        video_metadata = await client.get_video_info(video_request)
+        await record_quota_usage(ctx, 1)
+        total_video_comments = video_metadata.comment_count or 0
+
         # Auto-size limit based on video comment count if not specified
         if limit is None:
-            await ctx.info(f"Fetching video info to determine comment count for {video_id}")
-            video_request = MetadataRequest(video_id=video_id)
-            video_metadata = await client.get_video_info(video_request)
-            await record_quota_usage(ctx, 1)
-            total_comments = video_metadata.comment_count or 0
-            limit = total_comments or 10000
-            await ctx.info(f"Video has {total_comments} comments, downloading up to {limit}")
+            limit = total_video_comments or 10000
+            await ctx.info(f"Video has {total_video_comments} comments, downloading up to {limit}")
 
         if not 1 <= limit <= 10000:
             raise ToolError("limit must be between 1 and 10000")
@@ -217,7 +238,6 @@ async def download_comments(
         next_page_token = None
         total_fetched = 0
         pages_fetched = 0
-        estimated_pages = max(1, limit // 100)
 
         while total_fetched < limit:
             remaining = min(100, limit - total_fetched)
@@ -259,19 +279,13 @@ async def download_comments(
         await ctx.info(f"Download complete: {len(all_comments)} comments fetched")
 
         # Build response object for compatibility
-        from src.models.youtube import CommentsResponse, YouTubeComment
+        from src.models.youtube import CommentsResponse
         response = CommentsResponse(
             video_id=video_id,
             total_comments=len(all_comments),
             comments=all_comments,
             request_params=request
         )
-
-        # Get total comment count from video info for comparison
-        video_request = MetadataRequest(video_id=video_id)
-        video_metadata = await client.get_video_info(video_request)
-        await record_quota_usage(ctx, 1)
-        total_video_comments = video_metadata.comment_count or 0
 
         # Convert comments to appropriate format and calculate actual tokens
         if slim:
@@ -306,7 +320,7 @@ async def download_comments(
                 "tokenization_method": "Claude tokenization patterns"
             },
             "api_metadata": {
-                "quota_used": pages_fetched + 2,
+                "quota_used": pages_fetched + 1,
                 "quota_remaining": quota["remaining"],
                 "api_version": "v3",
                 "data_source": "YouTube Data API"
@@ -750,21 +764,7 @@ async def get_video_info(video_id: str, ctx: Context = None) -> dict:
 
         quota = await get_quota_from_state(ctx)
 
-        # Format duration in human-readable format
-        duration_formatted = metadata.duration
-        if metadata.duration and metadata.duration.startswith('PT'):
-            import re
-            duration_match = re.match(r'PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?', metadata.duration)
-            if duration_match:
-                hours, minutes, seconds = duration_match.groups()
-                parts = []
-                if hours:
-                    parts.append(f"{hours}h")
-                if minutes:
-                    parts.append(f"{minutes}m")
-                if seconds:
-                    parts.append(f"{seconds}s")
-                duration_formatted = " ".join(parts) if parts else "0s"
+        duration_formatted = format_iso_duration(metadata.duration)
 
         recommendations = []
         if metadata.comment_count:
@@ -987,7 +987,6 @@ async def get_channel_videos(
         if not isinstance(channel_id, str) or not channel_id.strip():
             raise ToolError("channel_id must be a non-empty string")
 
-        import re
         if not re.match(r'^UC[a-zA-Z0-9_-]{22}$', channel_id.strip()):
             raise ToolError("Invalid YouTube channel ID format (should start with UC and be 24 chars)")
 
@@ -1015,27 +1014,12 @@ async def get_channel_videos(
 
         formatted_videos = []
         for video in response.videos:
-            duration_formatted = video.duration
-            if video.duration and video.duration.startswith('PT'):
-                import re as re2
-                duration_match = re2.match(r'PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?', video.duration)
-                if duration_match:
-                    hours, minutes, seconds = duration_match.groups()
-                    parts = []
-                    if hours:
-                        parts.append(f"{hours}h")
-                    if minutes:
-                        parts.append(f"{minutes}m")
-                    if seconds:
-                        parts.append(f"{seconds}s")
-                    duration_formatted = " ".join(parts) if parts else "0s"
-
             formatted_video = {
                 "video_id": video.video_id,
                 "title": video.title,
                 "description": video.description,
                 "published_at": video.published_at,
-                "duration": duration_formatted,
+                "duration": format_iso_duration(video.duration),
                 "view_count": video.view_count,
                 "like_count": video.like_count,
                 "comment_count": video.comment_count,
