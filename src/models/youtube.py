@@ -1,7 +1,7 @@
 """Pydantic models for YouTube comment data."""
 
 from typing import Optional, List, Literal
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 import re
 
 class CommentRequest(BaseModel):
@@ -26,12 +26,11 @@ class CommentRequest(BaseModel):
         description="Sort order: 0=popular, 1=recent"
     )
     
-    @validator('video_id')
+    @field_validator('video_id')
+    @classmethod
     def validate_video_id(cls, v):
         """Validate YouTube video ID format."""
-        # YouTube video IDs are typically 11 characters, alphanumeric with - and _
         if not re.match(r'^[a-zA-Z0-9_-]{11}$', v):
-            # Also accept longer IDs that might be valid
             if not re.match(r'^[a-zA-Z0-9_-]{11,20}$', v):
                 raise ValueError('Invalid YouTube video ID format')
         return v
@@ -149,7 +148,8 @@ class MetadataRequest(BaseModel):
         description="YouTube video ID"
     )
     
-    @validator('video_id')
+    @field_validator('video_id')
+    @classmethod
     def validate_video_id(cls, v):
         """Validate YouTube video ID format."""
         if not re.match(r'^[a-zA-Z0-9_-]{11,20}$', v):
@@ -256,7 +256,8 @@ class VideoListRequest(BaseModel):
         description="Sort order: 'date' (newest first), 'relevance', 'viewCount'"
     )
     
-    @validator('channel_id')
+    @field_validator('channel_id')
+    @classmethod
     def validate_channel_id(cls, v):
         """Validate YouTube channel ID format."""
         if not re.match(r'^UC[a-zA-Z0-9_-]{22}$', v):
