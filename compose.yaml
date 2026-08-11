@@ -8,10 +8,10 @@ services:
       - DEBUG=${DEBUG:-false}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     ports:
-      - "${BIND_IP:-0.0.0.0}:${PORT:-8080}:8080"
+      - "${BIND_IP:-0.0.0.0}:${HOST_PORT:-8080}:${PORT:-8080}"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-X", "POST", "http://localhost:8080/mcp/", 
+      test: ["CMD", "curl", "-X", "POST", "http://localhost:${PORT:-8080}/mcp/",
              "-H", "Content-Type: application/json",
              "-H", "Accept: application/json, text/event-stream",
              "-d", '{"jsonrpc":"2.0","method":"tools/call","id":"health","params":{"name":"health_check","arguments":{}}}']
